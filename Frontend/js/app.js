@@ -9,12 +9,38 @@ const App = {
   init() {
     State.init();
 
+    // Check hash route if present
+    const hash = window.location.hash.replace('#', '').toLowerCase();
+    if (['dashboard', 'spaces', 'simulation', 'analytics', 'devices', 'settings'].includes(hash)) {
+      State.activeView = hash;
+    } else if (hash === 'signin') {
+      State.user = null;
+    } else if (hash === 'onboarding') {
+      State.user = { id: 'usr_new', name: 'Divam', email: 'divam@breatheclean.io', isOnboarded: false };
+    }
+
     // Check auth & onboarding state
     this.renderCurrentApplicationState();
 
     // Subscribe to state changes
     State.subscribe((event, data) => {
       this.handleStateChange(event, data);
+    });
+
+    // Hash change listener
+    window.addEventListener('hashchange', () => {
+      const newHash = window.location.hash.replace('#', '').toLowerCase();
+      if (['dashboard', 'spaces', 'simulation', 'analytics', 'devices', 'settings'].includes(newHash)) {
+        if (State.activeView !== newHash) {
+          State.setActiveView(newHash);
+        }
+      } else if (newHash === 'signin') {
+        State.user = null;
+        this.renderCurrentApplicationState();
+      } else if (newHash === 'onboarding') {
+        State.user = { id: 'usr_new', name: 'Divam', email: 'divam@breatheclean.io', isOnboarded: false };
+        this.renderCurrentApplicationState();
+      }
     });
 
     // Start background live clock
@@ -156,6 +182,7 @@ const App = {
       btn.addEventListener('click', () => {
         const view = btn.dataset.view;
         if (view) {
+          window.location.hash = view;
           State.setActiveView(view);
           const sidebar = document.getElementById('app-sidebar');
           if (sidebar) sidebar.classList.remove('mobile-open');
