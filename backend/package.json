@@ -1,0 +1,21 @@
+{
+  "name": "breathe-clean-backend",
+  "version": "1.0.0",
+  "description": "Local simulated sensor and device APIs for Breathe Clean",
+  "main": "src/server.js",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^5.1.0"
+  },
+  "scripts": {
+    "dev": "nodemon src/server.js",
+    "start": "node src/server.js"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
