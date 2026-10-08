@@ -1,7 +1,22 @@
 {
-  "name": "hackathon",
+  "name": "breathe-clean",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "description": "AI-Powered Indoor Air Quality & Autonomous Natural Ventilation System",
+  "author": "Divam Malik",
+  "license": "MIT",
+  "keywords": [
+    "hackathon",
+    "indoor-air-quality",
+    "ventilation",
+    "smart-building",
+    "iot-actuation",
+    "react19",
+    "vite",
+    "open-meteo",
+    "leaflet",
+    "cfd-simulation"
+  ],
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,6 +25,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "leaflet": "^1.9.4",
     "lucide-react": "^1.53.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"

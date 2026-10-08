@@ -1794,3 +1794,84 @@ input:checked + .toggle-slider:before {
   align-items: center;
   gap: 16px;
 }
+
+/* Button micro-interactions */
+button {
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+button:active {
+  transform: scale(0.97) !important;
+}
+
+button:hover {
+  filter: brightness(1.04);
+}
+
+/* Custom range sliders */
+input[type="range"] {
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--border-color);
+  outline: none;
+  transition: opacity 0.2s;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+/* Responsive adjustments for Controls & Setup Wizard */
+@media (max-width: 900px) {
+  .app-layout {
+    flex-direction: column;
+  }
+  
+  .sidebar {
+    width: 100%;
+    height: auto;
+    position: relative;
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .main-wrapper {
+    margin-left: 0;
+  }
+
+  .top-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 16px 20px;
+  }
+
+  .header-right {
+    width: 100%;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .dashboard-content {
+    padding: 16px;
+  }
+}
+
+@media (max-width: 600px) {
+  .btn-demo-pill {
+    padding: 6px 10px;
+    font-size: 0.72rem;
+  }
+
+  .datetime-location-box {
+    display: none;
+  }
+}
+
