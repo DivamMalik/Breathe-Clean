@@ -9,6 +9,7 @@ const Views = {
       { id: 'simulation', label: 'Simulation', icon: Utils.icons.simulation },
       { id: 'analytics', label: 'Analytics', icon: Utils.icons.analytics },
       { id: 'devices', label: 'Devices', icon: Utils.icons.devices },
+      { id: 'assistant', label: 'AI Assistant', icon: Utils.icons.sparkles },
       { id: 'settings', label: 'Settings', icon: Utils.icons.settings }
     ];
 
@@ -1239,6 +1240,177 @@ const Views = {
             <button class="btn btn-outline" id="btn-mode-cancel">Cancel</button>
             <button class="btn ${isToManual ? 'btn-amber' : 'btn-primary'}" id="btn-mode-confirm">${confirmBtnText}</button>
           </div>
+        </div>
+      </div>
+    `;
+  },
+
+  // Format Chat Markdown & lists
+  formatChatMessage(text) {
+    if (!text) return '';
+    let html = Utils.escapeHtml(text);
+    html = html.replace(/^### (.*$)/gim, '<h4 class="chat-heading">$1</h4>');
+    html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+    html = html.replace(/^\- (.*$)/gim, '<li class="chat-bullet">$1</li>');
+    html = html.replace(/(<li class="chat-bullet">[\s\S]*?<\/li>)/g, '<ul class="chat-list">$1</ul>');
+    html = html.replace(/\n/g, '<br/>');
+    return html;
+  },
+
+  // Full AI Assistant Workspace View
+  renderAssistant(room) {
+    const isAuto = room ? room.mode === 'AUTO' : true;
+    const messages = Chatbot.messages || [];
+
+    const promptSuggestions = [
+      'Switch to Manual mode',
+      'Turn purifier to High',
+      'Simulate outdoor smog (AQI 175)',
+      'Why are the windows closed?',
+      'Switch to Living Room',
+      'Open the windows',
+      'Set CO₂ to 1,350 ppm',
+      'Go to Analytics'
+    ];
+
+    return `
+      <div class="view-content view-assistant">
+        <div class="view-page-header">
+          <div>
+            <div class="assistant-title-row">
+              <span class="assistant-sparkle-badge">${Utils.icons.sparkles}</span>
+              <h2 class="page-title">AI Assistant & Co-Pilot</h2>
+            </div>
+            <p class="page-subtitle">Autonomous environmental orchestration with live account and hardware actuation.</p>
+          </div>
+          <div class="assistant-header-actions">
+            <span class="assistant-context-pill">
+              <span class="ctx-dot ${isAuto ? 'dot-green' : 'dot-amber'}"></span>
+              <span>${room ? Utils.escapeHtml(room.name) : 'Space'} · ${room ? room.mode : 'AUTO'}</span>
+            </span>
+            <button class="btn btn-outline btn-sm" id="btn-clear-chat" title="Clear conversation history">
+              ${Utils.icons.trash} <span>Clear chat</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="assistant-workspace-card">
+          <!-- Suggestion Chips Bar -->
+          <div class="assistant-suggestions-bar">
+            <span class="sugg-label">Try asking:</span>
+            <div class="sugg-chips-scroll">
+              ${promptSuggestions.map(p => `
+                <button class="chat-suggestion-chip" data-prompt="${Utils.escapeHtml(p)}">${Utils.escapeHtml(p)}</button>
+              `).join('')}
+            </div>
+          </div>
+
+          <!-- Chat Messages Container -->
+          <div class="assistant-chat-container" id="assistant-chat-container">
+            ${messages.map(m => `
+              <div class="chat-message-row msg-${m.sender}">
+                <div class="chat-avatar">
+                  ${m.sender === 'bot' ? Utils.icons.sparkles : (State.user ? State.user.name.charAt(0).toUpperCase() : 'U')}
+                </div>
+                <div class="chat-bubble">
+                  <div class="chat-meta">
+                    <span class="chat-author">${m.sender === 'bot' ? 'Breathe Clean Co-Pilot' : (State.user ? Utils.escapeHtml(State.user.name) : 'You')}</span>
+                    <span class="chat-timestamp">${Utils.formatTime(new Date(m.timestamp))}</span>
+                  </div>
+                  <div class="chat-body-text">
+                    ${this.formatChatMessage(m.text)}
+                  </div>
+                  ${m.actionTag ? `
+                    <div class="chat-action-badge">
+                      <span class="badge-icon">✓</span>
+                      <span class="badge-tag">${Utils.escapeHtml(m.actionTag)}:</span>
+                      <span class="badge-detail">${Utils.escapeHtml(m.actionDetails || '')}</span>
+                    </div>
+                  ` : ''}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+
+          <!-- Input Composer Form -->
+          <form class="assistant-composer-form" id="assistant-composer-form">
+            <div class="composer-input-wrapper">
+              <textarea 
+                id="assistant-prompt-input" 
+                class="composer-textarea" 
+                placeholder="Give a prompt to control devices, switch modes, adjust simulation, or ask about air quality..." 
+                rows="1" 
+                required
+              ></textarea>
+              <button type="submit" class="btn btn-primary btn-send-prompt" id="btn-send-prompt" aria-label="Send prompt">
+                <span>Send</span> ${Utils.icons.send}
+              </button>
+            </div>
+            <div class="composer-footnote">
+              <span>Supports real-time device control, mode switching, space creation, telemetry simulation, and settings adjustment.</span>
+              <span class="keyboard-hint">Press Enter to send</span>
+            </div>
+          </form>
+        </div>
+      </div>
+    `;
+  },
+
+  // Floating AI Assistant Drawer Widget (available across all views)
+  renderFloatingAssistantWidget() {
+    return `
+      <div class="floating-assistant-wrapper" id="floating-assistant-wrapper">
+        <!-- Floating Action Button -->
+        <button class="floating-assistant-btn" id="btn-floating-assistant" title="Open AI Assistant">
+          <span class="fab-sparkle">${Utils.icons.sparkles}</span>
+          <span class="fab-label">AI Assistant</span>
+          <span class="fab-pulse"></span>
+        </button>
+
+        <!-- Slide-up Floating Chat Drawer -->
+        <div class="floating-chat-drawer" id="floating-chat-drawer">
+          <div class="floating-drawer-head">
+            <div class="drawer-head-title">
+              <span class="drawer-icon">${Utils.icons.sparkles}</span>
+              <div>
+                <strong>Breathe Clean Co-Pilot</strong>
+                <span class="drawer-sub">Autonomous Actuation</span>
+              </div>
+            </div>
+            <div class="drawer-head-actions">
+              <button class="drawer-btn" id="btn-expand-assistant" title="Expand to full workspace">
+                ${Utils.icons.dashboard}
+              </button>
+              <button class="drawer-btn" id="btn-close-floating-drawer" title="Close drawer">
+                ${Utils.icons.x}
+              </button>
+            </div>
+          </div>
+
+          <div class="floating-drawer-suggestions">
+            <button class="mini-chip" data-prompt="Turn purifier to High">Purifier High</button>
+            <button class="mini-chip" data-prompt="Switch to Manual mode">Manual Mode</button>
+            <button class="mini-chip" data-prompt="Why are windows closed?">Why closed?</button>
+            <button class="mini-chip" data-prompt="Simulate outdoor smog (AQI 175)">Smog Spike</button>
+          </div>
+
+          <div class="floating-drawer-body" id="floating-drawer-messages">
+            <!-- Messages rendered dynamically -->
+          </div>
+
+          <form class="floating-drawer-composer" id="floating-drawer-form">
+            <input 
+              type="text" 
+              id="floating-prompt-input" 
+              placeholder="Ask anything or command hardware..." 
+              autocomplete="off" 
+              required
+            />
+            <button type="submit" class="drawer-send-btn" aria-label="Send">
+              ${Utils.icons.send}
+            </button>
+          </form>
         </div>
       </div>
     `;

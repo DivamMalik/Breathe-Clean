@@ -8,10 +8,11 @@ const App = {
 
   init() {
     State.init();
+    Chatbot.init();
 
     // Check hash route if present
     const hash = window.location.hash.replace('#', '').toLowerCase();
-    if (['dashboard', 'spaces', 'simulation', 'analytics', 'devices', 'settings'].includes(hash)) {
+    if (['dashboard', 'spaces', 'simulation', 'analytics', 'devices', 'assistant', 'settings'].includes(hash)) {
       State.activeView = hash;
     } else if (hash === 'signin') {
       State.user = null;
@@ -30,7 +31,7 @@ const App = {
     // Hash change listener
     window.addEventListener('hashchange', () => {
       const newHash = window.location.hash.replace('#', '').toLowerCase();
-      if (['dashboard', 'spaces', 'simulation', 'analytics', 'devices', 'settings'].includes(newHash)) {
+      if (['dashboard', 'spaces', 'simulation', 'analytics', 'devices', 'assistant', 'settings'].includes(newHash)) {
         if (State.activeView !== newHash) {
           State.setActiveView(newHash);
         }
@@ -81,10 +82,17 @@ const App = {
       </div>
       <div id="modal-container"></div>
       <div id="toast-container" class="toast-container"></div>
+      ${Views.renderFloatingAssistantWidget()}
     `;
 
     this.attachGlobalShellEvents();
+    this.attachFloatingAssistantEvents();
     this.attachViewSpecificEvents();
+
+    const floatingWidget = document.getElementById('floating-assistant-wrapper');
+    if (floatingWidget) {
+      floatingWidget.style.display = (State.activeView === 'assistant') ? 'none' : '';
+    }
 
     if (State.activeView === 'dashboard') {
       this.startAirflowSimulation();
@@ -106,6 +114,8 @@ const App = {
         return Views.renderAnalytics();
       case 'devices':
         return Views.renderDevices(State.rooms);
+      case 'assistant':
+        return Views.renderAssistant(activeRoom);
       case 'settings':
         return Views.renderSettings(State.user);
       default:
@@ -115,6 +125,11 @@ const App = {
 
   handleStateChange(event, data) {
     if (event === 'view_changed') {
+      const floatingWidget = document.getElementById('floating-assistant-wrapper');
+      if (floatingWidget) {
+        floatingWidget.style.display = (data === 'assistant') ? 'none' : '';
+      }
+
       const container = document.getElementById('app-body-container');
       if (container) {
         this.stopAirflowSimulation();
@@ -384,9 +399,190 @@ const App = {
           Utils.showToast(`${dev.name} toggled to ${next}`, 'success');
         });
       });
+    } else if (view === 'assistant') {
+      this.attachAssistantViewEvents();
     } else if (view === 'settings') {
       this.attachSettingsEvents();
     }
+  },
+
+  // -------------------------------------------------------------
+  // AI Assistant Full Workspace Events
+  // -------------------------------------------------------------
+  attachAssistantViewEvents() {
+    const form = document.getElementById('assistant-composer-form');
+    const input = document.getElementById('assistant-prompt-input');
+    const container = document.getElementById('assistant-chat-container');
+    const clearBtn = document.getElementById('btn-clear-chat');
+
+    const scrollToBottom = () => {
+      if (container) {
+        container.scrollTop = container.scrollHeight;
+      }
+    };
+    scrollToBottom();
+
+    // Auto-scroll on initial render
+    setTimeout(scrollToBottom, 60);
+
+    // Suggestion chips
+    document.querySelectorAll('.chat-suggestion-chip').forEach(chip => {
+      chip.addEventListener('click', async () => {
+        const prompt = chip.dataset.prompt;
+        if (prompt) {
+          await Chatbot.sendUserPrompt(prompt);
+          this.refreshAssistantChatUI();
+        }
+      });
+    });
+
+    // Clear chat
+    if (clearBtn) {
+      clearBtn.addEventListener('click', () => {
+        Chatbot.clearHistory();
+        this.refreshAssistantChatUI();
+        Utils.showToast('Conversation reset', 'info');
+      });
+    }
+
+    // Submit prompt
+    if (form && input) {
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          form.dispatchEvent(new Event('submit', { cancelable: true }));
+        }
+      });
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const text = input.value.trim();
+        if (!text) return;
+
+        input.value = '';
+        input.style.height = 'auto';
+
+        await Chatbot.sendUserPrompt(text);
+        this.refreshAssistantChatUI();
+      });
+    }
+  },
+
+  refreshAssistantChatUI() {
+    const container = document.getElementById('assistant-chat-container');
+    if (container) {
+      container.innerHTML = (Chatbot.messages || []).map(m => `
+        <div class="chat-message-row msg-${m.sender}">
+          <div class="chat-avatar">
+            ${m.sender === 'bot' ? Utils.icons.sparkles : (State.user ? State.user.name.charAt(0).toUpperCase() : 'U')}
+          </div>
+          <div class="chat-bubble">
+            <div class="chat-meta">
+              <span class="chat-author">${m.sender === 'bot' ? 'Breathe Clean Co-Pilot' : (State.user ? Utils.escapeHtml(State.user.name) : 'You')}</span>
+              <span class="chat-timestamp">${Utils.formatTime(new Date(m.timestamp))}</span>
+            </div>
+            <div class="chat-body-text">
+              ${Views.formatChatMessage(m.text)}
+            </div>
+            ${m.actionTag ? `
+              <div class="chat-action-badge">
+                <span class="badge-icon">✓</span>
+                <span class="badge-tag">${Utils.escapeHtml(m.actionTag)}:</span>
+                <span class="badge-detail">${Utils.escapeHtml(m.actionDetails || '')}</span>
+              </div>
+            ` : ''}
+          </div>
+        </div>
+      `).join('');
+      container.scrollTop = container.scrollHeight;
+    }
+
+    // Also refresh floating messages if drawer exists
+    this.refreshFloatingDrawerMessages();
+  },
+
+  // -------------------------------------------------------------
+  // Floating AI Assistant Drawer Events
+  // -------------------------------------------------------------
+  attachFloatingAssistantEvents() {
+    const toggleBtn = document.getElementById('btn-floating-assistant');
+    const drawer = document.getElementById('floating-chat-drawer');
+    const closeBtn = document.getElementById('btn-close-floating-drawer');
+    const expandBtn = document.getElementById('btn-expand-assistant');
+    const form = document.getElementById('floating-drawer-form');
+    const input = document.getElementById('floating-prompt-input');
+
+    if (toggleBtn && drawer) {
+      toggleBtn.addEventListener('click', () => {
+        drawer.classList.toggle('open');
+        if (drawer.classList.contains('open')) {
+          this.refreshFloatingDrawerMessages();
+          if (input) input.focus();
+        }
+      });
+    }
+
+    if (closeBtn && drawer) {
+      closeBtn.addEventListener('click', () => {
+        drawer.classList.remove('open');
+      });
+    }
+
+    if (expandBtn && drawer) {
+      expandBtn.addEventListener('click', () => {
+        drawer.classList.remove('open');
+        window.location.hash = 'assistant';
+        State.setActiveView('assistant');
+      });
+    }
+
+    // Mini suggestions in floating drawer
+    document.querySelectorAll('.floating-drawer-suggestions .mini-chip').forEach(chip => {
+      chip.addEventListener('click', async () => {
+        const prompt = chip.dataset.prompt;
+        if (prompt) {
+          await Chatbot.sendUserPrompt(prompt);
+          this.refreshFloatingDrawerMessages();
+          if (State.activeView === 'assistant') {
+            this.refreshAssistantChatUI();
+          }
+        }
+      });
+    });
+
+    // Floating form submission
+    if (form && input) {
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const text = input.value.trim();
+        if (!text) return;
+
+        input.value = '';
+        await Chatbot.sendUserPrompt(text);
+        this.refreshFloatingDrawerMessages();
+        if (State.activeView === 'assistant') {
+          this.refreshAssistantChatUI();
+        }
+      });
+    }
+  },
+
+  refreshFloatingDrawerMessages() {
+    const msgBox = document.getElementById('floating-drawer-messages');
+    if (!msgBox) return;
+
+    msgBox.innerHTML = (Chatbot.messages || []).map(m => `
+      <div class="mini-chat-msg mini-msg-${m.sender}">
+        <div class="mini-chat-text">${Views.formatChatMessage(m.text)}</div>
+        ${m.actionTag ? `
+          <div class="mini-action-tag">
+            ✓ ${Utils.escapeHtml(m.actionTag)}: ${Utils.escapeHtml(m.actionDetails || '')}
+          </div>
+        ` : ''}
+      </div>
+    `).join('');
+
+    msgBox.scrollTop = msgBox.scrollHeight;
   },
 
   // -------------------------------------------------------------
