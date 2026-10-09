@@ -1413,18 +1413,7 @@ const Views = {
                 <p class="auth-form-sub">Sign in to your account</p>
               </div>
 
-              <!-- Google One-Tap / OAuth Sign In Button -->
-              <button type="button" class="btn-google-auth" id="btn-google-signin">
-                <span class="google-icon-wrapper">${Utils.icons.google}</span>
-                <span class="google-btn-text">Sign in with Google</span>
-              </button>
-
-              <div class="auth-divider">
-                <span class="auth-divider-line"></span>
-                <span class="auth-divider-text">or continue with email</span>
-                <span class="auth-divider-line"></span>
-              </div>
-
+              <!-- Primary Form: Email & Password -->
               <form id="form-sign-in" class="auth-form">
                 <div class="form-field">
                   <label for="signin-email">Email</label>
@@ -1454,6 +1443,28 @@ const Views = {
                 </button>
               </form>
 
+              <!-- Secondary Option: Google Sign In -->
+              <div class="auth-divider">
+                <span class="auth-divider-line"></span>
+                <span class="auth-divider-text">or continue with Google</span>
+                <span class="auth-divider-line"></span>
+              </div>
+
+              <!-- Official Google Identity Services container (if client ID configured) -->
+              <div id="g_id_signin" class="gsi-container" style="display:none; margin-bottom:12px;"></div>
+
+              <!-- One-Click Google Auth Button -->
+              <button type="button" class="btn-google-auth" id="btn-google-signin">
+                <span class="google-icon-wrapper">${Utils.icons.google}</span>
+                <span class="google-btn-text">Sign in with Google</span>
+              </button>
+
+              <div class="google-setup-hint-row">
+                <button type="button" class="btn-text-setup" id="btn-open-google-setup">
+                  ${Utils.icons.settings} <span>${API.getGoogleClientId() ? 'Google OAuth Client ID Active' : 'Setup Real Google Cloud OAuth (2-min guide)'}</span>
+                </button>
+              </div>
+
               <div class="auth-form-footer">
                 <span>Don't have an account?</span>
                 <button class="link-btn-toggle-auth" id="btn-goto-signup">Create one</button>
@@ -1468,18 +1479,7 @@ const Views = {
                 <p class="auth-form-sub">Get started with cleaner, healthier spaces.</p>
               </div>
 
-              <!-- Google Sign Up Button -->
-              <button type="button" class="btn-google-auth" id="btn-google-signup">
-                <span class="google-icon-wrapper">${Utils.icons.google}</span>
-                <span class="google-btn-text">Sign up with Google</span>
-              </button>
-
-              <div class="auth-divider">
-                <span class="auth-divider-line"></span>
-                <span class="auth-divider-text">or register with email</span>
-                <span class="auth-divider-line"></span>
-              </div>
-
+              <!-- Primary Form: Registration with Email & Password -->
               <form id="form-sign-up" class="auth-form">
                 <div class="form-field">
                   <label for="signup-name">Full name</label>
@@ -1511,6 +1511,27 @@ const Views = {
                   <span>Create account</span> ${Utils.icons.arrowRight}
                 </button>
               </form>
+
+              <!-- Secondary Option: Google Sign Up -->
+              <div class="auth-divider">
+                <span class="auth-divider-line"></span>
+                <span class="auth-divider-text">or register with Google</span>
+                <span class="auth-divider-line"></span>
+              </div>
+
+              <!-- Official Google Identity Services container (if client ID configured) -->
+              <div id="g_id_signup" class="gsi-container" style="display:none; margin-bottom:12px;"></div>
+
+              <button type="button" class="btn-google-auth" id="btn-google-signup">
+                <span class="google-icon-wrapper">${Utils.icons.google}</span>
+                <span class="google-btn-text">Sign up with Google</span>
+              </button>
+
+              <div class="google-setup-hint-row">
+                <button type="button" class="btn-text-setup" id="btn-open-google-setup-signup">
+                  ${Utils.icons.settings} <span>${API.getGoogleClientId() ? 'Google OAuth Client ID Active' : 'Setup Real Google Cloud OAuth (2-min guide)'}</span>
+                </button>
+              </div>
 
               <div class="auth-form-footer">
                 <span>Already have an account?</span>
@@ -2021,6 +2042,119 @@ const Views = {
 
             <div class="google-dialog-footer-text">
               To continue, Google will share your name, email address, language preference, and profile picture with Breathe Clean. Before using this app, review their <a href="#" onclick="return false;">Privacy Policy</a> and <a href="#" onclick="return false;">Terms of Service</a>.
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  },
+
+  // 2-Minute Google Cloud Console OAuth Setup Modal
+  renderGoogleSetupModal() {
+    const existingId = API.getGoogleClientId();
+    return `
+      <div class="modal-backdrop google-auth-backdrop" id="google-setup-backdrop">
+        <div class="google-setup-dialog" role="dialog" aria-modal="true">
+          <div class="google-dialog-header">
+            <div class="google-brand-row">
+              <span class="google-svg-logo">${Utils.icons.google}</span>
+              <div>
+                <span class="google-service-name" style="font-weight: 600; color: #1e293b; font-size: 14px;">Connect Real Google Account</span>
+                <span style="display: block; font-size: 11px; color: #64748b;">Google Identity Services &bull; 2-Minute Setup Guide</span>
+              </div>
+            </div>
+            <button class="google-modal-close" id="btn-close-google-setup" aria-label="Close">&times;</button>
+          </div>
+
+          <div class="google-setup-body">
+            <div class="setup-intro-banner">
+              <div class="setup-intro-icon">${Utils.icons.shield}</div>
+              <div class="setup-intro-text">
+                <strong>Why this is needed:</strong> Google requires you to register your local origin (<code class="setup-origin-code">http://localhost:8080</code>) in Google Cloud Console so it can safely open your personal Google account selector. It's 100% free and takes ~2 minutes.
+              </div>
+            </div>
+
+            <div class="setup-steps-list">
+              <!-- Step 1 -->
+              <div class="setup-step-card">
+                <div class="step-num-badge">1</div>
+                <div class="step-card-content">
+                  <div class="step-card-title">Open Google Cloud Credentials</div>
+                  <div class="step-card-desc">
+                    Go to the Google Cloud Console credentials page (sign in with your personal Google account if prompted).
+                  </div>
+                  <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer" class="btn-step-action">
+                    <span>Open Google Cloud Console</span> <span style="font-size:11px;">↗</span>
+                  </a>
+                </div>
+              </div>
+
+              <!-- Step 2 -->
+              <div class="setup-step-card">
+                <div class="step-num-badge">2</div>
+                <div class="step-card-content">
+                  <div class="step-card-title">Create OAuth Client ID</div>
+                  <div class="step-card-desc">
+                    Click <strong>+ CREATE CREDENTIALS</strong> at the top &rarr; select <strong>OAuth client ID</strong>.<br>
+                    <span class="step-tip-text">Tip: If asked to configure the Consent Screen, select <em>External</em>, enter app name <em>Breathe Clean</em>, and click Save.</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Step 3 -->
+              <div class="setup-step-card">
+                <div class="step-num-badge">3</div>
+                <div class="step-card-content">
+                  <div class="step-card-title">Select "Web application" & Add Origins</div>
+                  <div class="step-card-desc">
+                    Set Application type to <strong>Web application</strong>. Under <strong>Authorized JavaScript origins</strong>, click <strong>+ ADD URI</strong> and paste:
+                  </div>
+                  <div class="step-origins-copy-box">
+                    <div class="origin-copy-row">
+                      <code>http://localhost:8080</code>
+                      <button type="button" class="btn-copy-origin" data-copy="http://localhost:8080">Copy</button>
+                    </div>
+                    <div class="origin-copy-row">
+                      <code>http://127.0.0.1:8080</code>
+                      <button type="button" class="btn-copy-origin" data-copy="http://127.0.0.1:8080">Copy</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Step 4 -->
+              <div class="setup-step-card">
+                <div class="step-num-badge">4</div>
+                <div class="step-card-content">
+                  <div class="step-card-title">Paste Your Client ID Below</div>
+                  <div class="step-card-desc">
+                    Click <strong>Create</strong>, copy the generated <strong>Client ID</strong>, and paste it here:
+                  </div>
+                  <div class="setup-input-wrapper">
+                    <input 
+                      type="text" 
+                      id="setup-google-client-id" 
+                      class="form-input setup-clientid-input" 
+                      placeholder="e.g. 1234567890-abcdef...apps.googleusercontent.com" 
+                      value="${existingId}" 
+                      spellcheck="false"
+                      autocomplete="off"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="setup-actions-footer">
+              <button type="button" class="btn btn-primary btn-block btn-save-gsi" id="btn-save-and-connect-gsi">
+                <span>Save Client ID & Open Real Google Sign-In</span> ${Utils.icons.arrowRight}
+              </button>
+              
+              <div class="setup-secondary-actions">
+                <button type="button" class="btn-link-demo" id="btn-demo-google-bypass">
+                  No Client ID right now? Click for instant personal account test
+                </button>
+              </div>
             </div>
           </div>
         </div>

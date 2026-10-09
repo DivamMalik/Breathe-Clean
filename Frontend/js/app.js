@@ -1482,6 +1482,61 @@ const App = {
   },
 
   // -------------------------------------------------------------
+  // Google Identity Services SDK Initialization
+  // -------------------------------------------------------------
+  initGoogleAuthSDK() {
+    const clientId = API.getGoogleClientId();
+    if (!clientId) return false;
+
+    if (!window.google || !window.google.accounts || !window.google.accounts.id) {
+      setTimeout(() => this.initGoogleAuthSDK(), 350);
+      return false;
+    }
+
+    try {
+      window.google.accounts.id.initialize({
+        client_id: clientId,
+        callback: async (response) => {
+          try {
+            Utils.showToast('Connecting to your Google Account...', 'info', 1200);
+            const user = await API.loginWithGoogleCredential(response.credential);
+            State.user = user;
+            State.activeView = 'dashboard';
+            window.location.hash = 'dashboard';
+            this.showDashboardEntranceAnimation = true;
+            this.renderCurrentApplicationState();
+            Utils.showToast(`Signed in as ${user.name} (${user.email})`, 'success');
+          } catch (err) {
+            console.error('Google ID token verification failed:', err);
+            Utils.showToast('Google Sign-in failed: ' + (err.message || 'Validation error'), 'warning');
+          }
+        },
+        auto_select: false,
+        cancel_on_tap_outside: true
+      });
+
+      const gsiTarget = document.getElementById('g_id_signin') || document.getElementById('g_id_signup');
+      if (gsiTarget) {
+        gsiTarget.style.display = 'block';
+        window.google.accounts.id.renderButton(gsiTarget, {
+          theme: 'outline',
+          size: 'large',
+          width: 380,
+          text: 'continue_with',
+          shape: 'rectangular',
+          logo_alignment: 'left'
+        });
+        const fallbackBtn = document.getElementById('btn-google-signin') || document.getElementById('btn-google-signup');
+        if (fallbackBtn) fallbackBtn.style.display = 'none';
+      }
+      return true;
+    } catch (err) {
+      console.warn('Google SDK init error:', err);
+      return false;
+    }
+  },
+
+  // -------------------------------------------------------------
   // Authentication & Onboarding Forms
   // -------------------------------------------------------------
   attachAuthEvents() {
@@ -1489,6 +1544,9 @@ const App = {
     const formSignUp = document.getElementById('form-sign-up');
     const btnGotoSignUp = document.getElementById('btn-goto-signup');
     const btnGotoSignIn = document.getElementById('btn-goto-signin');
+
+    // Initialize Google Identity Services if client ID is set
+    this.initGoogleAuthSDK();
 
     if (btnGotoSignUp) {
       btnGotoSignUp.addEventListener('click', () => {
@@ -1523,8 +1581,85 @@ const App = {
       });
     });
 
-    // Google Sign-In & Sign-Up Handlers
-    const handleGoogleAuth = () => {
+    // Helper: Open 2-Minute Google Setup Walkthrough Modal
+    const openGoogleSetupModal = () => {
+      let modalWrapper = document.getElementById('google-modal-container');
+      if (!modalWrapper) {
+        modalWrapper = document.createElement('div');
+        modalWrapper.id = 'google-modal-container';
+        document.body.appendChild(modalWrapper);
+      }
+      modalWrapper.innerHTML = Views.renderGoogleSetupModal();
+
+      const backdrop = document.getElementById('google-setup-backdrop');
+      const closeBtn = document.getElementById('btn-close-google-setup');
+      const closeSetupModal = () => {
+        if (modalWrapper) modalWrapper.innerHTML = '';
+      };
+
+      if (closeBtn) closeBtn.addEventListener('click', closeSetupModal);
+      if (backdrop) {
+        backdrop.addEventListener('click', (e) => {
+          if (e.target === backdrop) closeSetupModal();
+        });
+      }
+
+      // Copy origin buttons
+      document.querySelectorAll('.btn-copy-origin').forEach(copyBtn => {
+        copyBtn.addEventListener('click', (e) => {
+          const textToCopy = e.target.getAttribute('data-copy');
+          if (navigator.clipboard && textToCopy) {
+            navigator.clipboard.writeText(textToCopy).then(() => {
+              copyBtn.textContent = 'Copied!';
+              setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1800);
+              Utils.showToast(`Copied ${textToCopy} to clipboard!`, 'info', 1200);
+            });
+          }
+        });
+      });
+
+      // Save & Connect GSI button
+      const btnSaveGsi = document.getElementById('btn-save-and-connect-gsi');
+      if (btnSaveGsi) {
+        btnSaveGsi.addEventListener('click', () => {
+          const input = document.getElementById('setup-google-client-id');
+          const val = input ? input.value.trim() : '';
+          if (!val) {
+            Utils.showToast('Please paste your Google OAuth Client ID', 'warning');
+            if (input) input.focus();
+            return;
+          }
+          API.setGoogleClientId(val);
+          closeSetupModal();
+          this.initGoogleAuthSDK();
+          Utils.showToast('Google Client ID saved! Prompting Google sign in...', 'success');
+          try {
+            if (window.google?.accounts?.id) {
+              window.google.accounts.id.prompt();
+            }
+          } catch (err) {
+            console.warn('Prompt error:', err);
+          }
+          const setupBtn = document.getElementById('btn-open-google-setup') || document.getElementById('btn-open-google-setup-signup');
+          if (setupBtn) {
+            const span = setupBtn.querySelector('span');
+            if (span) span.textContent = 'Google OAuth Client ID Active';
+          }
+        });
+      }
+
+      // Instant personal account test bypass link
+      const btnDemoBypass = document.getElementById('btn-demo-google-bypass');
+      if (btnDemoBypass) {
+        btnDemoBypass.addEventListener('click', () => {
+          closeSetupModal();
+          openSimulatedGooglePicker();
+        });
+      }
+    };
+
+    // Helper: Open Interactive Google Account Picker Modal
+    const openSimulatedGooglePicker = () => {
       let modalWrapper = document.getElementById('google-modal-container');
       if (!modalWrapper) {
         modalWrapper = document.createElement('div');
@@ -1628,11 +1763,37 @@ const App = {
       }
     };
 
+    // Google Sign-In & Sign-Up Buttons
+    const handleGoogleAuthAction = () => {
+      const clientId = API.getGoogleClientId();
+      if (clientId && window.google?.accounts?.id) {
+        try {
+          window.google.accounts.id.prompt((notification) => {
+            if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+              // If browser blocked One Tap or dismissed, open the guide or account modal
+              openSimulatedGooglePicker();
+            }
+          });
+        } catch {
+          openSimulatedGooglePicker();
+        }
+      } else {
+        openGoogleSetupModal();
+      }
+    };
+
     const btnGoogleSignIn = document.getElementById('btn-google-signin');
-    if (btnGoogleSignIn) btnGoogleSignIn.addEventListener('click', handleGoogleAuth);
+    if (btnGoogleSignIn) btnGoogleSignIn.addEventListener('click', handleGoogleAuthAction);
 
     const btnGoogleSignUp = document.getElementById('btn-google-signup');
-    if (btnGoogleSignUp) btnGoogleSignUp.addEventListener('click', handleGoogleAuth);
+    if (btnGoogleSignUp) btnGoogleSignUp.addEventListener('click', handleGoogleAuthAction);
+
+    // Setup guide trigger buttons
+    const btnOpenGoogleSetup = document.getElementById('btn-open-google-setup');
+    if (btnOpenGoogleSetup) btnOpenGoogleSetup.addEventListener('click', openGoogleSetupModal);
+
+    const btnOpenGoogleSetupSignup = document.getElementById('btn-open-google-setup-signup');
+    if (btnOpenGoogleSetupSignup) btnOpenGoogleSetupSignup.addEventListener('click', openGoogleSetupModal);
 
     if (formSignIn) {
       formSignIn.addEventListener('submit', async (e) => {
