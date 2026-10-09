@@ -1,4 +1,9 @@
-const { getSensorData, updateSensorData } = require("../data/sensorData");
+const {
+  getSensorData,
+  updateSensorData,
+  validateCompleteSensorData
+} = require("../data/sensorData");
+const { saveSensorReading } = require("../data/database");
 const { generateDecision } = require("../services/decisionEngine");
 
 const scenarios = {
@@ -16,6 +21,19 @@ const scenarios = {
 };
 
 function runSimulation(request, response) {
+  const sensorData = {
+    ...getSensorData(),
+    ...scenarios[request.params.scenario]
+  };
+  const validation = validateCompleteSensorData(sensorData);
+  if (validation.error) {
+    return response.status(500).json({
+      success: false,
+      error: validation.error
+    });
+  }
+
+  saveSensorReading(sensorData, request.params.scenario);
   const sensorResult = updateSensorData(scenarios[request.params.scenario]);
   if (sensorResult.error) {
     return response.status(500).json({
@@ -24,11 +42,10 @@ function runSimulation(request, response) {
     });
   }
 
-  const sensorData = getSensorData();
   return response.json({
     success: true,
-    sensorData,
-    decision: generateDecision(sensorData)
+    sensorData: sensorResult.data,
+    decision: generateDecision(sensorResult.data)
   });
 }
 

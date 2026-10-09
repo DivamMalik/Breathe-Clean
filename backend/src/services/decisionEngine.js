@@ -1,57 +1,22 @@
+const { getExpectedDeviceState, thresholds } = require("./environmentRules");
+
 function generateDecision(sensorData) {
-  const { outdoorAQI, indoorAQI, co2 } = sensorData;
+  const deviceState = getExpectedDeviceState(sensorData);
+  const outdoorPolluted = sensorData.outdoorAQI >= thresholds.outdoorAQI;
+  let reason;
 
-  if (outdoorAQI > 150 && indoorAQI > 150) {
-    return {
-      windows: "CLOSED",
-      purifier: "ON",
-      ventilation: "FILTERED",
-      mode: "PURIFICATION",
-      reason:
-        "Both indoor and outdoor air quality are poor. Windows remain closed and purification is active."
-    };
+  if (outdoorPolluted) {
+    reason =
+      "Outdoor AQI is elevated. Windows remain closed and purification is active.";
+  } else if (sensorData.co2 >= thresholds.co2) {
+    reason =
+      "Indoor CO2 is elevated and outdoor AQI is acceptable. Increasing fresh-air ventilation.";
+  } else {
+    reason =
+      "Indoor and outdoor AQI and CO2 are below the configured thresholds. Natural ventilation is active.";
   }
 
-  if (outdoorAQI > 150) {
-    return {
-      windows: "CLOSED",
-      purifier: "ON",
-      ventilation: "FILTERED",
-      mode: "PURIFICATION",
-      reason:
-        "Outdoor pollution is high. Windows closed automatically and purifier activated."
-    };
-  }
-
-  if (co2 > 1200 && outdoorAQI <= 100) {
-    return {
-      windows: "OPEN",
-      purifier: "OFF",
-      ventilation: "HIGH",
-      mode: "FRESH_AIR",
-      reason:
-        "Indoor CO2 is high and outdoor air is acceptable. Increasing fresh-air exchange."
-    };
-  }
-
-  if (outdoorAQI <= 100 && co2 <= 1200) {
-    return {
-      windows: "OPEN",
-      purifier: "OFF",
-      ventilation: "NORMAL",
-      mode: "NORMAL",
-      reason: "Outdoor air is clean and indoor CO2 is normal. Natural ventilation is active."
-    };
-  }
-
-  return {
-    windows: "CLOSED",
-    purifier: "OFF",
-    ventilation: "NORMAL",
-    mode: "NORMAL",
-    reason:
-      "Air quality conditions do not require purification or fresh-air exchange. Maintaining normal ventilation."
-  };
+  return { ...deviceState, reason };
 }
 
 module.exports = { generateDecision };

@@ -2,7 +2,11 @@ const {
   getSensorData,
   validateCompleteSensorData
 } = require("../data/sensorData");
-const { updateDeviceState } = require("../data/deviceState");
+const {
+  updateDeviceState,
+  validateDeviceState
+} = require("../data/deviceState");
+const { saveAppliedDecision } = require("../data/database");
 const { generateDecision } = require("../services/decisionEngine");
 const { validateDecision } = require("../services/safetyValidator");
 
@@ -36,12 +40,25 @@ function applyDecision(request, response) {
     });
   }
 
-  const result = updateDeviceState({
+  const sensorData = getSensorData();
+  const deviceUpdates = {
     windows: decision.windows,
     purifier: decision.purifier,
     ventilation: decision.ventilation,
     mode: decision.mode
-  });
+  };
+  const deviceValidation = validateDeviceState(deviceUpdates);
+  if (deviceValidation.error) {
+    return response.status(422).json({
+      success: false,
+      applied: false,
+      error: deviceValidation.error
+    });
+  }
+
+  saveAppliedDecision(decision, sensorData);
+
+  const result = updateDeviceState(deviceUpdates);
 
   if (result.error) {
     return response.status(422).json({

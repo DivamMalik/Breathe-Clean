@@ -1,18 +1,18 @@
 const deviceState = {
-  windows: "OPEN",
-  purifier: "OFF",
-  ventilation: "NORMAL",
-  mode: "NORMAL"
+  windows: "CLOSED",
+  purifier: "ON",
+  ventilation: "FILTERED",
+  mode: "PURIFICATION"
 };
 
 const allowedValues = {
   windows: ["OPEN", "CLOSED"],
   purifier: ["ON", "OFF"],
   ventilation: ["LOW", "NORMAL", "HIGH", "FILTERED"],
-  mode: ["NORMAL", "PURIFICATION", "FRESH_AIR"]
+  mode: ["NORMAL", "PURIFICATION", "VENTILATION"]
 };
 
-function updateDeviceState(updates) {
+function validateDeviceState(updates) {
   if (
     !updates ||
     typeof updates !== "object" ||
@@ -31,6 +31,15 @@ function updateDeviceState(updates) {
     }
   }
 
+  return {};
+}
+
+function updateDeviceState(updates) {
+  const validation = validateDeviceState(updates);
+  if (validation.error) {
+    return validation;
+  }
+
   Object.assign(deviceState, updates);
   return { data: { ...deviceState } };
 }
@@ -39,4 +48,9 @@ function getDeviceState() {
   return { ...deviceState };
 }
 
-module.exports = { allowedValues, getDeviceState, updateDeviceState };
+module.exports = {
+  allowedValues,
+  getDeviceState,
+  updateDeviceState,
+  validateDeviceState
+};

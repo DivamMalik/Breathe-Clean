@@ -6,6 +6,11 @@ const sensorRoutes = require("./routes/sensorRoutes");
 const deviceRoutes = require("./routes/deviceRoutes");
 const decisionRoutes = require("./routes/decisionRoutes");
 const simulationRoutes = require("./routes/simulationRoutes");
+const { allowedValues } = require("./data/deviceState");
+const { thresholds } = require("./services/environmentRules");
+const { restorePersistedState } = require("./data/restorePersistedState");
+
+restorePersistedState();
 
 const app = express();
 
@@ -15,7 +20,9 @@ app.use(express.json());
 app.get("/api/health", (_request, response) => {
   response.json({
     success: true,
-    message: "Breathe Clean backend is running"
+    message: "Breathe Clean backend is running",
+    decisionModes: allowedValues.mode,
+    decisionThresholds: thresholds
   });
 });
 
