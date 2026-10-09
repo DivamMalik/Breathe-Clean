@@ -1332,16 +1332,6 @@ const Views = {
                 ${user && user.authProvider === 'google' ? 'Active Linked' : 'Available'}
               </span>
             </div>
-            <div class="settings-row" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #f1f5f9;">
-              <div>
-                <strong>Google Cloud OAuth Client ID (Optional)</strong>
-                <p class="text-muted">Enter your GCP Client ID to authenticate directly with your own Google Cloud project.</p>
-              </div>
-              <div style="display: flex; gap: 8px;">
-                <input type="text" id="setting-google-client-id" placeholder="e.g. 12345678-abc.apps.googleusercontent.com" value="${Utils.escapeHtml(API.getGoogleClientId())}" style="font-size: 12px; width: 240px; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px;" />
-                <button class="btn btn-secondary btn-sm" id="btn-save-google-client-id">Save</button>
-              </div>
-            </div>
           </div>
 
           <!-- Units Section -->
@@ -1409,7 +1399,7 @@ const Views = {
                 <div class="mobile-only-logo">
                   ${Utils.icons.leaf} <strong>Breathe Clean</strong>
                 </div>
-                <h2 class="auth-form-title">Welcome back</h2>
+                <h2 class="auth-form-title">Welcome</h2>
                 <p class="auth-form-sub">Sign in to your account</p>
               </div>
 
@@ -1446,7 +1436,7 @@ const Views = {
               <!-- Secondary Option: Google Sign In -->
               <div class="auth-divider">
                 <span class="auth-divider-line"></span>
-                <span class="auth-divider-text">or continue with Google</span>
+                <span class="auth-divider-text">or continue with Others</span>
                 <span class="auth-divider-line"></span>
               </div>
 
@@ -1458,12 +1448,6 @@ const Views = {
                 <span class="google-icon-wrapper">${Utils.icons.google}</span>
                 <span class="google-btn-text">Sign in with Google</span>
               </button>
-
-              <div class="google-setup-hint-row">
-                <button type="button" class="btn-text-setup" id="btn-open-google-setup">
-                  ${Utils.icons.settings} <span>${API.getGoogleClientId() ? 'Google OAuth Client ID Active' : 'Setup Real Google Cloud OAuth (2-min guide)'}</span>
-                </button>
-              </div>
 
               <div class="auth-form-footer">
                 <span>Don't have an account?</span>
@@ -1515,7 +1499,7 @@ const Views = {
               <!-- Secondary Option: Google Sign Up -->
               <div class="auth-divider">
                 <span class="auth-divider-line"></span>
-                <span class="auth-divider-text">or register with Google</span>
+                <span class="auth-divider-text">or register with Others</span>
                 <span class="auth-divider-line"></span>
               </div>
 
@@ -1526,12 +1510,6 @@ const Views = {
                 <span class="google-icon-wrapper">${Utils.icons.google}</span>
                 <span class="google-btn-text">Sign up with Google</span>
               </button>
-
-              <div class="google-setup-hint-row">
-                <button type="button" class="btn-text-setup" id="btn-open-google-setup-signup">
-                  ${Utils.icons.settings} <span>${API.getGoogleClientId() ? 'Google OAuth Client ID Active' : 'Setup Real Google Cloud OAuth (2-min guide)'}</span>
-                </button>
-              </div>
 
               <div class="auth-form-footer">
                 <span>Already have an account?</span>
