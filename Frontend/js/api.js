@@ -237,6 +237,60 @@ const API = {
     return user;
   },
 
+  getGoogleClientId() {
+    return localStorage.getItem('bc_google_client_id') || '';
+  },
+
+  setGoogleClientId(clientId) {
+    if (clientId) {
+      localStorage.setItem('bc_google_client_id', clientId.trim());
+    } else {
+      localStorage.removeItem('bc_google_client_id');
+    }
+  },
+
+  async loginWithGoogleCredential(credential) {
+    await this._delay();
+    try {
+      const base64Url = credential.split('.')[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const jsonPayload = decodeURIComponent(atob(base64).split('').map(c => {
+        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+      }).join(''));
+      const payload = JSON.parse(jsonPayload);
+
+      const user = {
+        id: 'usr_g_' + (payload.sub || Date.now()),
+        name: payload.name || payload.email.split('@')[0],
+        email: payload.email,
+        avatar: payload.picture || '',
+        authProvider: 'google',
+        isOnboarded: true,
+        lastLogin: new Date().toISOString()
+      };
+      localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
+      return user;
+    } catch (err) {
+      console.error('Failed to parse Google JWT credential:', err);
+      throw new Error('Google authentication credential validation failed.');
+    }
+  },
+
+  async loginWithGoogle(customProfile = null) {
+    await this._delay();
+    const user = customProfile || {
+      id: 'usr_google_divam',
+      name: 'Divam Malik',
+      email: 'divam.malik@gmail.com',
+      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&h=120&q=80',
+      authProvider: 'google',
+      isOnboarded: true,
+      lastLogin: new Date().toISOString()
+    };
+    localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
+    return user;
+  },
+
   async signup(name, email, password) {
     await this._delay();
     if (!email || !password || !name) throw new Error('All fields are required');
@@ -253,13 +307,16 @@ const API = {
 
   async logout() {
     await this._delay();
-    localStorage.removeItem(STORAGE_KEYS.USER);
+    localStorage.setItem(STORAGE_KEYS.USER, 'signed_out');
     sessionStorage.removeItem(STORAGE_KEYS.USER);
     return true;
   },
 
   getCurrentUser() {
     const raw = localStorage.getItem(STORAGE_KEYS.USER) || sessionStorage.getItem(STORAGE_KEYS.USER);
+    if (raw === 'signed_out') {
+      return null;
+    }
     if (!raw) {
       // Default initial mock logged-in state for instant preview unless signed out
       const defaultUser = {

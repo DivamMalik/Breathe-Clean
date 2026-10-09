@@ -96,6 +96,9 @@ const App = {
 
     if (State.activeView === 'dashboard') {
       this.startAirflowSimulation();
+      if (this.showDashboardEntranceAnimation) {
+        this.runDashboardLoadingAnimation();
+      }
     } else if (State.activeView === 'analytics') {
       this.renderAnalyticsChart();
     }
@@ -404,16 +407,8 @@ const App = {
       btnOptimize.addEventListener('click', async () => {
         const room = State.getActiveRoom();
         if (!room) return;
-        const decision = Engine.decide(room.environment, room, room.devices);
-        room.decision = decision;
-        for (const [devType, targetState] of Object.entries(decision.targetDeviceStates || {})) {
-          const dev = room.devices.find(d => d.type === devType);
-          if (dev) {
-            await API.sendDeviceCommand(room.id, dev.id, targetState, 'AUTO_OPTIMIZE');
-          }
-        }
-        await State.evaluateRoom(room.id);
-        Utils.showToast('All IAQ actuators synchronized with ASHRAE 62.1 optimal setpoints', 'success');
+        const res = await State.applyPreset(room.id, 'optimize');
+        Utils.showToast(res.message, 'success');
       });
     }
 
@@ -422,19 +417,8 @@ const App = {
       btnFlush.addEventListener('click', async () => {
         const room = State.getActiveRoom();
         if (!room) return;
-        const win = room.devices.find(d => d.type === 'window');
-        const vent = room.devices.find(d => d.type === 'ventilation');
-        const pur = room.devices.find(d => d.type === 'purifier');
-        
-        if (room.environment.outdoorAQI <= 60 && win) {
-          await API.sendDeviceCommand(room.id, win.id, 'Open', 'QUICK_FLUSH');
-        }
-        if (vent) await API.sendDeviceCommand(room.id, vent.id, 'High', 'QUICK_FLUSH');
-        if (pur) await API.sendDeviceCommand(room.id, pur.id, 'High', 'QUICK_FLUSH');
-        
-        State.rooms = API.getRooms();
-        await State.evaluateRoom(room.id);
-        Utils.showToast('Rapid air displacement purge initiated at maximum CADR rate', 'success');
+        const res = await State.applyPreset(room.id, 'flush');
+        Utils.showToast(res.message, 'success');
       });
     }
 
@@ -443,17 +427,8 @@ const App = {
       btnEco.addEventListener('click', async () => {
         const room = State.getActiveRoom();
         if (!room) return;
-        const win = room.devices.find(d => d.type === 'window');
-        const vent = room.devices.find(d => d.type === 'ventilation');
-        const pur = room.devices.find(d => d.type === 'purifier');
-        
-        if (win) await API.sendDeviceCommand(room.id, win.id, 'Closed', 'ECO_MODE');
-        if (vent) await API.sendDeviceCommand(room.id, vent.id, 'Low', 'ECO_MODE');
-        if (pur) await API.sendDeviceCommand(room.id, pur.id, 'Low', 'ECO_MODE');
-
-        State.rooms = API.getRooms();
-        await State.evaluateRoom(room.id);
-        Utils.showToast('Eco Silent whisper mode active (<22 dB, minimum energy consumption)', 'info');
+        const res = await State.applyPreset(room.id, 'eco');
+        Utils.showToast(res.message, 'info');
       });
     }
 
@@ -462,18 +437,19 @@ const App = {
       btnSeal.addEventListener('click', async () => {
         const room = State.getActiveRoom();
         if (!room) return;
-        const win = room.devices.find(d => d.type === 'window');
-        const vent = room.devices.find(d => d.type === 'ventilation');
-        const pur = room.devices.find(d => d.type === 'purifier');
-        
-        if (win) await API.sendDeviceCommand(room.id, win.id, 'Closed', 'PERIMETER_SEAL');
-        if (vent) await API.sendDeviceCommand(room.id, vent.id, 'Filtered', 'PERIMETER_SEAL');
-        if (pur) await API.sendDeviceCommand(room.id, pur.id, 'High', 'PERIMETER_SEAL');
-
-        State.rooms = API.getRooms();
-        await State.evaluateRoom(room.id);
-        Utils.showToast('Perimeter Sealed: Windows hermetically closed, MERV-13 recirculation active', 'warning');
+        const res = await State.applyPreset(room.id, 'seal');
+        Utils.showToast(res.message, 'warning');
       });
+    }
+
+    const btnQuickStandards = document.getElementById('btn-quick-standards-pill');
+    if (btnQuickStandards) {
+      btnQuickStandards.addEventListener('click', () => this.openStandardsModal());
+    }
+
+    const btnCardStandards = document.getElementById('btn-card-standards-pill');
+    if (btnCardStandards) {
+      btnCardStandards.addEventListener('click', () => this.openStandardsModal());
     }
 
     const btnCalibrate = document.getElementById('btn-recalibrate-sensors');
@@ -669,34 +645,8 @@ const App = {
         const room = State.getActiveRoom();
         if (!room) return;
 
-        const win = room.devices.find(d => d.type === 'window');
-        const vent = room.devices.find(d => d.type === 'ventilation');
-        const pur = room.devices.find(d => d.type === 'purifier');
-
-        if (preset === 'shield') {
-          if (win) await API.sendDeviceCommand(room.id, win.id, 'Closed', 'PRESET_SHIELD');
-          if (vent) await API.sendDeviceCommand(room.id, vent.id, 'Filtered', 'PRESET_SHIELD');
-          if (pur) await API.sendDeviceCommand(room.id, pur.id, 'Active', 'PRESET_SHIELD');
-          Utils.showToast('Clean Air Shield profile engaged: Continuous HEPA + MERV-13 filtration active', 'success');
-        } else if (preset === 'sleep') {
-          if (win) await API.sendDeviceCommand(room.id, win.id, 'Closed', 'PRESET_SLEEP');
-          if (vent) await API.sendDeviceCommand(room.id, vent.id, 'Low', 'PRESET_SLEEP');
-          if (pur) await API.sendDeviceCommand(room.id, pur.id, 'Low', 'PRESET_SLEEP');
-          Utils.showToast('Sleep Whisper profile engaged: <22 dB silent operation', 'info');
-        } else if (preset === 'smog') {
-          if (win) await API.sendDeviceCommand(room.id, win.id, 'Closed', 'PRESET_SMOG');
-          if (vent) await API.sendDeviceCommand(room.id, vent.id, 'Filtered', 'PRESET_SMOG');
-          if (pur) await API.sendDeviceCommand(room.id, pur.id, 'High', 'PRESET_SMOG');
-          Utils.showToast('Smog Lockdown profile engaged: Airtight hermetic seal active', 'warning');
-        } else if (preset === 'flush') {
-          if (win && room.environment.outdoorAQI <= 60) await API.sendDeviceCommand(room.id, win.id, 'Open', 'PRESET_FLUSH');
-          if (vent) await API.sendDeviceCommand(room.id, vent.id, 'High', 'PRESET_FLUSH');
-          if (pur) await API.sendDeviceCommand(room.id, pur.id, 'High', 'PRESET_FLUSH');
-          Utils.showToast('Rapid Flush profile engaged: Room air replacement active', 'success');
-        }
-
-        State.rooms = API.getRooms();
-        await State.evaluateRoom(room.id);
+        const res = await State.applyPreset(room.id, preset);
+        Utils.showToast(res.message, res.success ? 'success' : 'info');
       });
     });
 
@@ -1172,6 +1122,16 @@ const App = {
       });
     }
 
+    const btnSaveGoogleClientId = document.getElementById('btn-save-google-client-id');
+    if (btnSaveGoogleClientId) {
+      btnSaveGoogleClientId.addEventListener('click', () => {
+        const input = document.getElementById('setting-google-client-id');
+        const val = input ? input.value.trim() : '';
+        API.setGoogleClientId(val);
+        Utils.showToast(val ? 'Google Cloud OAuth Client ID saved' : 'Google Cloud Client ID cleared', 'success');
+      });
+    }
+
     const btnReset = document.getElementById('btn-reset-demo-data');
     if (btnReset) {
       btnReset.addEventListener('click', () => {
@@ -1392,43 +1352,14 @@ const App = {
     const container = document.getElementById('modal-container');
     if (!container) return;
 
-    container.innerHTML = `
-      <div class="modal-backdrop" id="standards-modal-backdrop">
-        <div class="modal-dialog" style="max-width: 540px;" role="dialog" aria-modal="true">
-          <div class="modal-header">
-            <div class="modal-header-title">
-              <span class="modal-icon" style="color:#059669;">${Utils.icons.shieldCheck}</span>
-              <h3>ANSI/ASHRAE Standard 62.1-2022</h3>
-            </div>
-            <button class="modal-close-btn" id="btn-close-standards-modal" aria-label="Close modal">${Utils.icons.x}</button>
-          </div>
-          <div class="modal-body" style="line-height:1.6; font-size:12.5px; color:#374151;">
-            <p style="margin-bottom:10px;"><strong>Ventilation for Acceptable Indoor Air Quality (ASHRAE 62.1):</strong></p>
-            <div style="background:#f9fafb; border:1px solid #e5e7eb; border-radius:6px; padding:10px; margin-bottom:12px; font-family:monospace; font-size:11.5px; color:#111827;">
-              Vbz = (Rp × Pz) + (Ra × Az)<br/>
-              • Rp = 5 cfm/person outdoor air rate<br/>
-              • Ra = 0.06 cfm/sq.ft area ventilation rate<br/>
-              • Pz = Room zone population<br/>
-              • Az = Zone floor area (m²)
-            </div>
-            <p style="margin-bottom:8px;"><strong>Deterministic Algorithmic Rules:</strong></p>
-            <ul style="padding-left:18px; margin-bottom:12px; display:flex; flex-direction:column; gap:6px;">
-              <li><strong>Outdoor Smog Seal:</strong> Outdoor AQI &gt; 60 triggers immediate perimeter window seal to protect room occupants.</li>
-              <li><strong>CO₂ Threshold:</strong> Indoor CO₂ &gt; 1,000 ppm triggers mechanical ERV ventilation escalation.</li>
-              <li><strong>Particulate Filtration:</strong> MERV-13 equivalent mechanical filtration and H13 True HEPA with 99.97% retention at 0.3μm.</li>
-              <li><strong>Thermal Comfort Envelope:</strong> Compliant with ASHRAE Standard 55 operative comfort range.</li>
-            </ul>
-          </div>
-          <div class="modal-footer">
-            <button class="btn btn-primary" id="btn-dismiss-standards-modal">Acknowledge & Close</button>
-          </div>
-        </div>
-      </div>
-    `;
+    const activeRoom = State.getActiveRoom();
+    container.innerHTML = Views.renderStandardsModal(activeRoom);
 
     const backdrop = document.getElementById('standards-modal-backdrop');
     const closeBtn = document.getElementById('btn-close-standards-modal');
     const dismissBtn = document.getElementById('btn-dismiss-standards-modal');
+    const recalcBtn = document.getElementById('btn-recalc-standards');
+
     const closeModal = () => { if (container) container.innerHTML = ''; };
 
     if (closeBtn) closeBtn.addEventListener('click', closeModal);
@@ -1436,6 +1367,16 @@ const App = {
     if (backdrop) {
       backdrop.addEventListener('click', (e) => {
         if (e.target === backdrop) closeModal();
+      });
+    }
+
+    if (recalcBtn) {
+      recalcBtn.addEventListener('click', async () => {
+        if (activeRoom) {
+          await State.evaluateRoom(activeRoom.id, true);
+          this.openStandardsModal();
+          Utils.showToast('ASHRAE compliance metrics recalculated', 'success');
+        }
       });
     }
   },
@@ -1565,15 +1506,133 @@ const App = {
       });
     }
 
-    // Toggle password visibility
+    // Toggle password visibility (Supports SVG eye/eyeOff state icon swap)
     document.querySelectorAll('.btn-toggle-pw').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const input = btn.previousElementSibling;
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const wrapper = btn.closest('.input-password-wrapper');
+        const input = wrapper ? wrapper.querySelector('input') : btn.previousElementSibling;
         if (input) {
-          input.type = input.type === 'password' ? 'text' : 'password';
+          const isPassword = input.type === 'password';
+          input.type = isPassword ? 'text' : 'password';
+          btn.innerHTML = isPassword ? Utils.icons.eyeOff : Utils.icons.eye;
+          btn.setAttribute('aria-label', isPassword ? 'Hide password' : 'Show password');
+          btn.style.color = isPassword ? 'var(--color-brand-primary)' : 'var(--color-text-muted)';
         }
       });
     });
+
+    // Google Sign-In & Sign-Up Handlers
+    const handleGoogleAuth = () => {
+      let modalWrapper = document.getElementById('google-modal-container');
+      if (!modalWrapper) {
+        modalWrapper = document.createElement('div');
+        modalWrapper.id = 'google-modal-container';
+        document.body.appendChild(modalWrapper);
+      }
+      modalWrapper.innerHTML = Views.renderGoogleAccountPickerModal();
+
+      const backdrop = document.getElementById('google-auth-backdrop');
+      const closeBtn = document.getElementById('btn-close-google-auth');
+      const acc1 = document.getElementById('btn-select-google-account-1');
+      const acc2 = document.getElementById('btn-select-google-account-2');
+
+      const closeGoogleModal = () => {
+        if (modalWrapper) modalWrapper.innerHTML = '';
+      };
+
+      if (closeBtn) closeBtn.addEventListener('click', closeGoogleModal);
+      if (backdrop) {
+        backdrop.addEventListener('click', (e) => {
+          if (e.target === backdrop) closeGoogleModal();
+        });
+      }
+
+      const completeGoogleLogin = async (profile) => {
+        try {
+          if (acc1) acc1.style.pointerEvents = 'none';
+          if (acc2) acc2.style.pointerEvents = 'none';
+          Utils.showToast('Connecting to Google Identity Services...', 'info', 1400);
+
+          const user = await API.loginWithGoogle(profile);
+          State.user = user;
+          closeGoogleModal();
+
+          // Navigate directly to dashboard with sleek animated telemetry loading
+          State.activeView = 'dashboard';
+          window.location.hash = 'dashboard';
+          this.showDashboardEntranceAnimation = true;
+          this.renderCurrentApplicationState();
+          Utils.showToast(`Signed in as ${user.name} (${user.email})`, 'success');
+        } catch (err) {
+          Utils.showToast(err.message, 'warning');
+        }
+      };
+
+      const btnToggleCustom = document.getElementById('btn-toggle-custom-google');
+      const formCustomGoogle = document.getElementById('form-custom-google-auth');
+
+      if (btnToggleCustom && formCustomGoogle) {
+        btnToggleCustom.addEventListener('click', () => {
+          const isHidden = formCustomGoogle.style.display === 'none';
+          formCustomGoogle.style.display = isHidden ? 'block' : 'none';
+          if (isHidden) {
+            document.getElementById('custom-google-email')?.focus();
+          }
+        });
+
+        formCustomGoogle.addEventListener('submit', (e) => {
+          e.preventDefault();
+          const emailInput = document.getElementById('custom-google-email');
+          const nameInput = document.getElementById('custom-google-name');
+          const email = emailInput ? emailInput.value.trim() : '';
+          const name = nameInput && nameInput.value.trim() ? nameInput.value.trim() : (email.split('@')[0].replace('.', ' ').replace(/^./, s => s.toUpperCase()));
+          if (!email) return;
+
+          completeGoogleLogin({
+            id: 'usr_google_' + Date.now(),
+            name: name,
+            email: email,
+            authProvider: 'google',
+            isOnboarded: true,
+            lastLogin: new Date().toISOString()
+          });
+        });
+      }
+
+      if (acc1) {
+        acc1.addEventListener('click', () => {
+          completeGoogleLogin({
+            id: 'usr_google_divam',
+            name: 'Divam Malik',
+            email: 'divam.malik@gmail.com',
+            authProvider: 'google',
+            isOnboarded: true,
+            lastLogin: new Date().toISOString()
+          });
+        });
+      }
+
+      if (acc2) {
+        acc2.addEventListener('click', () => {
+          completeGoogleLogin({
+            id: 'usr_google_dev',
+            name: 'Breathe Clean Dev',
+            email: 'engineering@breatheclean.io',
+            authProvider: 'google',
+            isOnboarded: true,
+            lastLogin: new Date().toISOString()
+          });
+        });
+      }
+    };
+
+    const btnGoogleSignIn = document.getElementById('btn-google-signin');
+    if (btnGoogleSignIn) btnGoogleSignIn.addEventListener('click', handleGoogleAuth);
+
+    const btnGoogleSignUp = document.getElementById('btn-google-signup');
+    if (btnGoogleSignUp) btnGoogleSignUp.addEventListener('click', handleGoogleAuth);
 
     if (formSignIn) {
       formSignIn.addEventListener('submit', async (e) => {
@@ -1585,6 +1644,10 @@ const App = {
         try {
           const user = await API.login(email, password, remember);
           State.user = user;
+          // Direct straight to dashboard with animated data loading
+          State.activeView = 'dashboard';
+          window.location.hash = 'dashboard';
+          this.showDashboardEntranceAnimation = true;
           this.renderCurrentApplicationState();
           Utils.showToast(`Welcome back, ${user.name}`, 'success');
         } catch (err) {
@@ -1608,7 +1671,13 @@ const App = {
 
         try {
           const user = await API.signup(name, email, pw);
+          user.isOnboarded = true; // take straight to dashboard as requested
+          API.updateUser(user);
           State.user = user;
+          // Direct straight to dashboard with animated data loading
+          State.activeView = 'dashboard';
+          window.location.hash = 'dashboard';
+          this.showDashboardEntranceAnimation = true;
           this.renderCurrentApplicationState();
           Utils.showToast('Account created successfully', 'success');
         } catch (err) {
@@ -1616,6 +1685,62 @@ const App = {
         }
       });
     }
+  },
+
+  runDashboardLoadingAnimation() {
+    this.showDashboardEntranceAnimation = false;
+    const viewDashboard = document.querySelector('.view-dashboard');
+    if (!viewDashboard) return;
+
+    viewDashboard.classList.add('dashboard-loading-anim');
+
+    // Prepend sleek telemetry sync banner
+    const existingBanner = document.getElementById('dash-telemetry-banner');
+    if (existingBanner) existingBanner.remove();
+
+    const banner = document.createElement('div');
+    banner.className = 'dashboard-telemetry-banner';
+    banner.id = 'dash-telemetry-banner';
+    banner.innerHTML = `
+      <div class="telemetry-banner-left">
+        <span class="telemetry-pulse-dot"></span>
+        <span>Streaming live Plantower laser & Senseair NDIR IoT sensors...</span>
+      </div>
+      <div class="telemetry-scan-track">
+        <div class="telemetry-scan-progress"></div>
+      </div>
+      <div class="telemetry-banner-right" id="telemetry-status-text">
+        Calibrating (1/4)
+      </div>
+    `;
+    viewDashboard.insertBefore(banner, viewDashboard.firstChild);
+
+    const statusText = document.getElementById('telemetry-status-text');
+
+    setTimeout(() => {
+      if (statusText) statusText.textContent = 'Plantower Laser Synced (2/4)';
+    }, 350);
+
+    setTimeout(() => {
+      if (statusText) statusText.textContent = 'Senseair NDIR Online (3/4)';
+    }, 700);
+
+    setTimeout(() => {
+      if (statusText) {
+        statusText.textContent = 'All 4 Sensors Synced · Deterministic IAQ Live';
+        statusText.style.color = '#059669';
+      }
+    }, 1100);
+
+    setTimeout(() => {
+      if (banner && banner.parentElement) {
+        banner.style.transition = 'opacity 0.4s ease-out, transform 0.4s ease-out';
+        banner.style.opacity = '0';
+        banner.style.transform = 'translateY(-6px)';
+        setTimeout(() => banner.remove(), 400);
+      }
+      viewDashboard.classList.remove('dashboard-loading-anim');
+    }, 2500);
   },
 
   attachOnboardingEvents() {

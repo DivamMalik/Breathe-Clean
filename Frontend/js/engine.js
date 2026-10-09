@@ -89,6 +89,11 @@ const Engine = {
       window: targetWindow,
       ventilation: targetVentilation,
       purifier: targetPurifier,
+      targetDeviceStates: {
+        window: targetWindow,
+        ventilation: targetVentilation,
+        purifier: targetPurifier
+      },
       title,
       reason,
       action,

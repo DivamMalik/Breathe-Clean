@@ -279,7 +279,7 @@ const Views = {
             <button class="toolbar-btn-secondary" id="btn-export-telemetry" title="Download real-time IAQ telemetry summary">
               ${Utils.icons.download} <span>Export IAQ Report</span>
             </button>
-            <div class="toolbar-profile-badge" title="Active Environmental Standard">
+            <div class="toolbar-profile-badge" id="btn-quick-standards-pill" style="cursor:pointer;" title="Active Environmental Standard (Click to view ASHRAE compliance matrix)">
               <span class="profile-badge-dot"></span>
               <span class="profile-badge-text">ASHRAE 62.1-2022</span>
             </div>
@@ -292,13 +292,18 @@ const Views = {
           <div class="dash-card card-room-view">
             <div class="card-head">
               <div class="card-head-title-group">
-                <span class="card-title">Room view</span>
+                <span class="card-title">Room View</span>
                 <span class="live-pill">
-                  <span class="live-pulse"></span> CFD Simulation
+                  <span class="live-pulse"></span> Live CFD
                 </span>
               </div>
-              <div class="room-view-head-controls">
-                <div class="sim-speed-selector" id="sim-speed-selector" title="Flow animation speed">
+              <span class="room-head-space-tag">${Utils.escapeHtml(room.name)} · ${room.area} m²</span>
+            </div>
+
+            <div class="room-canvas-container">
+              <!-- Integrated Technical HUD Overlay -->
+              <div class="room-canvas-hud-top">
+                <div class="sim-speed-selector" id="sim-speed-selector" title="CFD Simulation Speed">
                   <span class="speed-label">Speed:</span>
                   <button class="sim-speed-btn" data-speed="0.5">0.5x</button>
                   <button class="sim-speed-btn active" data-speed="1.0">1x</button>
@@ -308,9 +313,7 @@ const Views = {
                   ${Utils.icons.activity} <span>Laminar</span>
                 </button>
               </div>
-            </div>
 
-            <div class="room-canvas-container">
               <img src="${room.image}" alt="${room.name}" class="room-canvas-bg" id="room-canvas-bg" />
               <canvas id="airflow-canvas" class="airflow-canvas"></canvas>
               
@@ -318,7 +321,7 @@ const Views = {
               <div class="room-canvas-overlay-badges">
                 <span class="room-badge-indicator badge-window">
                   <span class="badge-dot dot-${winDev.state === 'Open' ? 'green' : 'neutral'}"></span>
-                  Window: ${winDev.state === 'Open' ? '45° Open' : 'Sealed 0°'}
+                  Window: ${winDev.state === 'Open' ? '45° Draft' : 'Sealed 0°'}
                 </span>
                 <span class="room-badge-indicator badge-purifier">
                   <span class="badge-dot dot-${purDev.state === 'Off' ? 'neutral' : 'green'}"></span>
@@ -356,7 +359,7 @@ const Views = {
             <div class="card-head">
               <div class="decision-head-left">
                 <span class="decision-icon">${Utils.icons.shieldCheck}</span>
-                <span class="card-title">System decision</span>
+                <span class="card-title">System Decision</span>
               </div>
               <span class="decision-time">${Utils.formatTime(new Date(decision.timestamp || Date.now()))}</span>
             </div>
@@ -380,7 +383,7 @@ const Views = {
               </div>
             </div>
 
-            <div class="decision-compliance-badge">
+            <div class="decision-compliance-badge" id="btn-card-standards-pill" style="cursor:pointer;" title="Click to view ASHRAE Standard details">
               <span class="compliance-tag">ASHRAE 62.1-2022</span>
               <span class="compliance-confidence">Deterministic Confidence: 99.4%</span>
             </div>
@@ -391,10 +394,10 @@ const Views = {
                 ${Utils.icons.zap} <span>Re-Evaluate</span>
               </button>
               <button class="card-btn card-btn-outline" id="btn-toggle-override" title="Switch between Auto and Manual Override">
-                ${Utils.icons.sliders} <span>${isAuto ? 'Manual Override' : 'Resume Auto'}</span>
+                ${Utils.icons.sliders} <span>Override</span>
               </button>
-              <button class="card-btn card-btn-ghost" id="btn-view-standard-modal" title="View standard compliance formulas">
-                ${Utils.icons.activity} <span>Standards</span>
+              <button class="card-btn card-btn-outline" id="btn-view-standard-modal" title="View standard compliance formulas">
+                ${Utils.icons.shieldCheck} <span>Standards</span>
               </button>
             </div>
           </div>
@@ -404,7 +407,7 @@ const Views = {
             <div class="card-head">
               <div class="card-head-title-group">
                 <span class="card-title">Hardware Actuators</span>
-                <span class="devices-count-pill">${room.devices.length} Connected</span>
+                <span class="devices-count-pill">${room.devices.length} Active</span>
               </div>
               <button class="link-btn-view-all" data-nav="devices">Fleet ${Utils.icons.arrowRight}</button>
             </div>
@@ -483,35 +486,22 @@ const Views = {
             </div>
           </div>
 
-          <!-- Column 4: Recent Activity & Audit Trail -->
+          <!-- Column 4: Recent Activity & Visual Event Trail -->
           <div class="dash-card card-recent-activity">
             <div class="card-head">
               <div class="card-head-title-group">
-                <span class="card-title">Live activity</span>
-                <span class="activity-badge-live">Real-time</span>
+                <span class="card-title">Live Activity</span>
+                <span class="activity-badge-live"><span class="activity-live-dot"></span> Live</span>
               </div>
-              <button class="link-btn-view-all" id="btn-refresh-activity" title="Refresh Activity">
+              <button class="link-btn-view-all" id="btn-refresh-activity" title="Refresh Live Stream">
                 ${Utils.icons.refresh}
               </button>
             </div>
 
-            <div class="activity-timeline">
+            <div class="activity-timeline" id="activity-timeline-container">
               ${recentActivity.length === 0 ? `
                 <div class="timeline-empty">No activity recorded yet for this space.</div>
-              ` : recentActivity.map(act => `
-                <div class="timeline-item">
-                  <div class="timeline-meta">
-                    <span class="timeline-time">${Utils.formatTime(new Date(act.timestamp))}</span>
-                    <span class="timeline-source source-${act.source ? act.source.toLowerCase() : 'system'}">
-                      <span class="source-dot"></span> ${act.source || 'SYSTEM'}
-                    </span>
-                  </div>
-                  <div class="timeline-content">
-                    <span class="timeline-title">${Utils.escapeHtml(act.action)}</span>
-                    <span class="timeline-detail">${Utils.escapeHtml(act.detail)}</span>
-                  </div>
-                </div>
-              `).join('')}
+              ` : recentActivity.map(act => this.renderActivityCard(act)).join('')}
             </div>
 
             <!-- Activity Management Footer -->
@@ -663,6 +653,212 @@ const Views = {
             </div>
           </div>
         </section>
+      </div>
+    `;
+  },
+
+  // Visual Activity Item Generator (Icons, State Transition Badges, Sources)
+  renderActivityCard(act) {
+    const rawAction = act.action || '';
+    const rawDetail = act.detail || '';
+    const source = (act.source || 'SYSTEM').toUpperCase();
+    const timeStr = Utils.formatTime(new Date(act.timestamp));
+    const timeAgoStr = Utils.timeAgo(act.timestamp);
+
+    // Determine category icon and styling
+    let icon = Utils.icons.shieldCheck;
+    let category = 'system';
+    let iconBg = '#ecfdf5';
+    let iconColor = '#059669';
+
+    const lowerAct = (rawAction + ' ' + rawDetail).toLowerCase();
+
+    if (lowerAct.includes('purifier') || lowerAct.includes('cadr') || lowerAct.includes('hepa')) {
+      category = 'purifier';
+      icon = Utils.icons.purifier;
+      iconBg = '#ecfdf5';
+      iconColor = '#10b981';
+    } else if (lowerAct.includes('window') || lowerAct.includes('seal') || lowerAct.includes('draft')) {
+      category = 'window';
+      icon = Utils.icons.window;
+      iconBg = '#eff6ff';
+      iconColor = '#3b82f6';
+    } else if (lowerAct.includes('ventilation') || lowerAct.includes('fan') || lowerAct.includes('merv') || lowerAct.includes('co2')) {
+      category = 'ventilation';
+      icon = Utils.icons.fan;
+      iconBg = '#f0fdfa';
+      iconColor = '#06b6d4';
+    } else if (lowerAct.includes('auto') || lowerAct.includes('manual') || lowerAct.includes('mode')) {
+      category = 'mode';
+      icon = Utils.icons.sliders;
+      iconBg = '#f5f3ff';
+      iconColor = '#8b5cf6';
+    } else if (lowerAct.includes('smog') || lowerAct.includes('wildfire') || lowerAct.includes('hazard')) {
+      category = 'alert';
+      icon = Utils.icons.lock;
+      iconBg = '#fff7ed';
+      iconColor = '#ea580c';
+    }
+
+    // Parse state transition (e.g. "Low -> High" or "Closed -> Open" or "Normal -> High")
+    let transitionHtml = '';
+    const combined = rawAction + ' ' + rawDetail;
+    const arrowMatch = combined.match(/([A-Za-z0-9°\s]{2,14})\s*(?:->|→)\s*([A-Za-z0-9°\s]{2,14})/);
+    let displayDetail = rawDetail;
+    let displayAction = rawAction;
+
+    if (arrowMatch) {
+      const fromState = arrowMatch[1].trim();
+      const toState = arrowMatch[2].trim();
+      transitionHtml = `
+        <div class="act-state-transition">
+          <span class="state-pill state-from">${Utils.escapeHtml(fromState)}</span>
+          <span class="state-arrow">&rarr;</span>
+          <span class="state-pill state-to">${Utils.escapeHtml(toState)}</span>
+        </div>
+      `;
+      // Don't duplicate the text if detail was just the transition
+      if (rawDetail.includes('→') || rawDetail.includes('->')) {
+        displayDetail = '';
+      }
+    }
+
+    return `
+      <div class="activity-card-item act-cat-${category}">
+        <div class="activity-icon-avatar" style="background:${iconBg}; color:${iconColor};">
+          ${icon}
+        </div>
+        <div class="activity-item-main">
+          <div class="activity-meta-row">
+            <span class="activity-source-pill source-${source.toLowerCase()}">${source}</span>
+            <span class="activity-timestamp" title="${timeStr}">${timeAgoStr}</span>
+          </div>
+          <div class="activity-title-row">
+            <span class="activity-action-name">${Utils.escapeHtml(displayAction.replace(/->/g, '→'))}</span>
+          </div>
+          ${transitionHtml}
+          ${displayDetail ? `<div class="activity-detail-desc">${Utils.escapeHtml(displayDetail)}</div>` : ''}
+        </div>
+      </div>
+    `;
+  },
+
+  // Interactive Executive-Grade ASHRAE 62.1-2022 Standards Compliance Modal
+  renderStandardsModal(room) {
+    const env = (room && room.environment) || {};
+    const outdoorAQI = env.outdoorAQI || 112;
+    const indoorAqi = env.indoorAQI || 38;
+    const co2 = env.co2 || 640;
+    const temp = env.temperature || 24;
+    const occupancy = env.occupancy || 2;
+    const area = (room && room.area) || 24;
+
+    const areaSqFt = area * 10.76;
+    const designCFM = Math.round((5 * occupancy) + (0.06 * areaSqFt));
+    const deliveredCFM = 180;
+    const complianceMargin = Math.round(((deliveredCFM - designCFM) / designCFM) * 100);
+
+    return `
+      <div class="modal-backdrop" id="standards-modal-backdrop">
+        <div class="modal-dialog modal-dialog-lg" role="dialog" aria-modal="true">
+          <div class="modal-header">
+            <div class="modal-header-title">
+              <span class="standards-shield-badge">${Utils.icons.shieldCheck}</span>
+              <div>
+                <h3 class="standards-dialog-title">ANSI / ASHRAE Standard 62.1-2022</h3>
+                <p class="standards-dialog-sub">Deterministic Regulatory Ventilation & Environmental Safety Matrix</p>
+              </div>
+            </div>
+            <button class="modal-close-btn" id="btn-close-standards-modal" aria-label="Close modal">${Utils.icons.x}</button>
+          </div>
+
+          <div class="modal-body standards-modal-body">
+            <!-- Space Live Compliance Scoreboard -->
+            <div class="standards-scoreboard">
+              <div class="score-card score-target">
+                <span class="score-label">Required Minimum (Vbz)</span>
+                <span class="score-val">${designCFM} <small>CFM</small></span>
+                <span class="score-meta">ASHRAE 62.1-2022 Table 6-1</span>
+              </div>
+              <div class="score-card score-delivered">
+                <span class="score-label">Current Delivered Flow</span>
+                <span class="score-val">${deliveredCFM} <small>CFM</small></span>
+                <span class="score-meta">${(deliveredCFM * 1.699).toFixed(0)} m³/h Active Delivery</span>
+              </div>
+              <div class="score-card score-status">
+                <span class="score-label">Compliance Margin</span>
+                <span class="score-val text-green">+${complianceMargin}%</span>
+                <span class="score-badge badge-pass">CERTIFIED COMPLIANT</span>
+              </div>
+            </div>
+
+            <!-- Mathematical Formulation Card -->
+            <div class="standards-formula-card">
+              <div class="formula-head">
+                <span class="formula-title">Ventilation Rate Procedure (VRP) Equation:</span>
+                <span class="formula-standard">Section 6.2 Standard Equation</span>
+              </div>
+              <div class="formula-math">
+                V<sub>bz</sub> = (R<sub>p</sub> &times; P<sub>z</sub>) + (R<sub>a</sub> &times; A<sub>z</sub>)
+              </div>
+              <div class="formula-legend">
+                <span class="legend-pill"><strong>R<sub>p</sub>:</strong> 5.0 CFM/person (People Rate)</span>
+                <span class="legend-pill"><strong>P<sub>z</sub>:</strong> ${occupancy} Occupants</span>
+                <span class="legend-pill"><strong>R<sub>a</sub>:</strong> 0.06 CFM/ft² (Area Rate)</span>
+                <span class="legend-pill"><strong>A<sub>z</sub>:</strong> ${area} m² (${areaSqFt.toFixed(0)} ft²)</span>
+              </div>
+            </div>
+
+            <!-- 4 Regulatory Safeguards Grid -->
+            <div class="standards-safeguards-title">Active Deterministic Safety Rules:</div>
+            <div class="standards-rules-grid">
+              <div class="std-rule-item">
+                <div class="rule-icon-box box-amber">${Utils.icons.lock}</div>
+                <div class="rule-info">
+                  <span class="rule-name">Outdoor Smog Lockdown</span>
+                  <p class="rule-desc">When Outdoor AQI &gt; 60, motorized windows seal hermetically to shield occupants from toxic particulate infiltration.</p>
+                  <span class="rule-status-tag ${outdoorAQI > 60 ? 'tag-active' : 'tag-nominal'}">${outdoorAQI > 60 ? 'Currently Active (' + outdoorAQI + ' AQI)' : 'Nominal Standby'}</span>
+                </div>
+              </div>
+
+              <div class="std-rule-item">
+                <div class="rule-icon-box box-cyan">${Utils.icons.fan}</div>
+                <div class="rule-info">
+                  <span class="rule-name">CO₂ Displacement Flush</span>
+                  <p class="rule-desc">When CO₂ exceeds 1,000 ppm, mechanical supply and exhaust ERV ventilation escalates to flush stale air and restore oxygen.</p>
+                  <span class="rule-status-tag ${co2 > 1000 ? 'tag-active' : 'tag-nominal'}">${co2 > 1000 ? 'CO₂ Elevated (' + co2 + ' ppm)' : 'Optimal (' + co2 + ' ppm)'}</span>
+                </div>
+              </div>
+
+              <div class="std-rule-item">
+                <div class="rule-icon-box box-green">${Utils.icons.purifier}</div>
+                <div class="rule-info">
+                  <span class="rule-name">Sub-Micron Particulate Protection</span>
+                  <p class="rule-desc">MERV-13 mechanical pre-filtration paired with H13 True HEPA ensures 99.97% removal efficiency at 0.3 micrometers.</p>
+                  <span class="rule-status-tag tag-nominal">Indoor AQI: ${indoorAqi} (Clean)</span>
+                </div>
+              </div>
+
+              <div class="std-rule-item">
+                <div class="rule-icon-box box-purple">${Utils.icons.leaf}</div>
+                <div class="rule-info">
+                  <span class="rule-name">ASHRAE 55 Thermal Comfort</span>
+                  <p class="rule-desc">Operative temperature target between 20°C - 25°C with relative humidity managed between 40% - 60%.</p>
+                  <span class="rule-status-tag tag-nominal">Current: ${temp}°C · Comfort Band Met</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-footer standards-modal-footer">
+            <button class="btn btn-secondary" id="btn-recalc-standards">
+              ${Utils.icons.refresh} <span>Recalculate Telemetry</span>
+            </button>
+            <button class="btn btn-primary" id="btn-dismiss-standards-modal">
+              Acknowledge & Close
+            </button>
+          </div>
+        </div>
       </div>
     `;
   },
@@ -1119,6 +1315,35 @@ const Views = {
             </div>
           </div>
 
+          <!-- Google Auth & Connected Accounts Section -->
+          <div class="settings-card">
+            <h3 class="settings-card-title">Connected Accounts & Google Auth</h3>
+            <div class="settings-row">
+              <div style="display:flex; align-items:center; gap:12px;">
+                <div style="width:36px; height:36px; border-radius:50%; background:#f8fafc; border:1px solid #e2e8f0; display:flex; align-items:center; justify-content:center;">
+                  ${Utils.icons.google}
+                </div>
+                <div>
+                  <strong>Google Identity Services</strong>
+                  <p class="text-muted">${user && user.authProvider === 'google' ? `Connected as ${Utils.escapeHtml(user.email)}` : 'Sign in with your Google account anytime'}</p>
+                </div>
+              </div>
+              <span class="device-status-badge ${user && user.authProvider === 'google' ? 'badge-green' : 'badge-neutral'}">
+                ${user && user.authProvider === 'google' ? 'Active Linked' : 'Available'}
+              </span>
+            </div>
+            <div class="settings-row" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #f1f5f9;">
+              <div>
+                <strong>Google Cloud OAuth Client ID (Optional)</strong>
+                <p class="text-muted">Enter your GCP Client ID to authenticate directly with your own Google Cloud project.</p>
+              </div>
+              <div style="display: flex; gap: 8px;">
+                <input type="text" id="setting-google-client-id" placeholder="e.g. 12345678-abc.apps.googleusercontent.com" value="${Utils.escapeHtml(API.getGoogleClientId())}" style="font-size: 12px; width: 240px; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px;" />
+                <button class="btn btn-secondary btn-sm" id="btn-save-google-client-id">Save</button>
+              </div>
+            </div>
+          </div>
+
           <!-- Units Section -->
           <div class="settings-card">
             <h3 class="settings-card-title">Units & Standards</h3>
@@ -1188,6 +1413,18 @@ const Views = {
                 <p class="auth-form-sub">Sign in to your account</p>
               </div>
 
+              <!-- Google One-Tap / OAuth Sign In Button -->
+              <button type="button" class="btn-google-auth" id="btn-google-signin">
+                <span class="google-icon-wrapper">${Utils.icons.google}</span>
+                <span class="google-btn-text">Sign in with Google</span>
+              </button>
+
+              <div class="auth-divider">
+                <span class="auth-divider-line"></span>
+                <span class="auth-divider-text">or continue with email</span>
+                <span class="auth-divider-line"></span>
+              </div>
+
               <form id="form-sign-in" class="auth-form">
                 <div class="form-field">
                   <label for="signin-email">Email</label>
@@ -1200,8 +1437,8 @@ const Views = {
                     <a href="#" class="field-link" id="link-forgot-pw">Forgot password?</a>
                   </div>
                   <div class="input-password-wrapper">
-                    <input type="password" id="signin-password" placeholder="Enter your password" value="••••••••" required />
-                    <button type="button" class="btn-toggle-pw" aria-label="Toggle password visibility">👁️</button>
+                    <input type="password" id="signin-password" placeholder="Enter your password" value="BreatheClean#2026" required />
+                    <button type="button" class="btn-toggle-pw" aria-label="Toggle password visibility">${Utils.icons.eye}</button>
                   </div>
                 </div>
 
@@ -1231,10 +1468,22 @@ const Views = {
                 <p class="auth-form-sub">Get started with cleaner, healthier spaces.</p>
               </div>
 
+              <!-- Google Sign Up Button -->
+              <button type="button" class="btn-google-auth" id="btn-google-signup">
+                <span class="google-icon-wrapper">${Utils.icons.google}</span>
+                <span class="google-btn-text">Sign up with Google</span>
+              </button>
+
+              <div class="auth-divider">
+                <span class="auth-divider-line"></span>
+                <span class="auth-divider-text">or register with email</span>
+                <span class="auth-divider-line"></span>
+              </div>
+
               <form id="form-sign-up" class="auth-form">
                 <div class="form-field">
                   <label for="signup-name">Full name</label>
-                  <input type="text" id="signup-name" placeholder="John Doe" required />
+                  <input type="text" id="signup-name" placeholder="Divam Malik" required />
                 </div>
 
                 <div class="form-field">
@@ -1245,16 +1494,16 @@ const Views = {
                 <div class="form-field">
                   <label for="signup-password">Password</label>
                   <div class="input-password-wrapper">
-                    <input type="password" id="signup-password" placeholder="Create a password" required />
-                    <button type="button" class="btn-toggle-pw" aria-label="Toggle password visibility">👁️</button>
+                    <input type="password" id="signup-password" placeholder="Create a password" value="BreatheClean#2026" required />
+                    <button type="button" class="btn-toggle-pw" aria-label="Toggle password visibility">${Utils.icons.eye}</button>
                   </div>
                 </div>
 
                 <div class="form-field">
                   <label for="signup-password-confirm">Confirm password</label>
                   <div class="input-password-wrapper">
-                    <input type="password" id="signup-password-confirm" placeholder="Confirm your password" required />
-                    <button type="button" class="btn-toggle-pw" aria-label="Toggle password visibility">👁️</button>
+                    <input type="password" id="signup-password-confirm" placeholder="Confirm your password" value="BreatheClean#2026" required />
+                    <button type="button" class="btn-toggle-pw" aria-label="Toggle password visibility">${Utils.icons.eye}</button>
                   </div>
                 </div>
 
@@ -1696,6 +1945,83 @@ const Views = {
           <div class="signout-actions">
             <button class="btn btn-danger btn-block" id="btn-confirm-signout">Sign out</button>
             <button class="btn btn-outline btn-block" id="btn-cancel-signout">Cancel</button>
+          </div>
+        </div>
+      </div>
+    `;
+  },
+
+  // Authentic Google OAuth Account Picker Modal
+  renderGoogleAccountPickerModal() {
+    return `
+      <div class="modal-backdrop google-auth-backdrop" id="google-auth-backdrop">
+        <div class="google-auth-dialog" role="dialog" aria-modal="true">
+          <div class="google-dialog-header">
+            <div class="google-brand-row">
+              <span class="google-svg-logo">${Utils.icons.google}</span>
+              <span class="google-service-name">Google Identity Services</span>
+            </div>
+            <button class="google-modal-close" id="btn-close-google-auth" aria-label="Close">&times;</button>
+          </div>
+
+          <div class="google-dialog-body">
+            <h3 class="google-dialog-title">Choose an account</h3>
+            <p class="google-dialog-sub">to continue to <strong style="color:#0f172a;">Breathe Clean</strong></p>
+
+            <div class="google-accounts-list">
+              <!-- Primary Account -->
+              <button class="google-account-item" id="btn-select-google-account-1">
+                <div class="google-avatar-circle">
+                  <span>D</span>
+                </div>
+                <div class="google-account-info">
+                  <span class="google-user-name">Divam Malik</span>
+                  <span class="google-user-email">divam.malik@gmail.com</span>
+                </div>
+                <span class="google-active-indicator">${Utils.icons.check}</span>
+              </button>
+
+              <!-- Secondary Account option -->
+              <button class="google-account-item" id="btn-select-google-account-2">
+                <div class="google-avatar-circle" style="background: #0d9488;">
+                  <span>B</span>
+                </div>
+                <div class="google-account-info">
+                  <span class="google-user-name">Breathe Clean Dev</span>
+                  <span class="google-user-email">engineering@breatheclean.io</span>
+                </div>
+              </button>
+
+              <!-- Use another account action -->
+              <button class="google-account-item google-item-add" id="btn-toggle-custom-google">
+                <div class="google-avatar-circle google-avatar-ghost">
+                  ${Utils.icons.plus}
+                </div>
+                <div class="google-account-info">
+                  <span class="google-user-name">Use another Google account</span>
+                  <span class="google-user-email">Sign in with any @gmail.com address</span>
+                </div>
+              </button>
+            </div>
+
+            <!-- Custom Google Account Inline Form (collapsible) -->
+            <form id="form-custom-google-auth" class="custom-google-form" style="display: none; margin-bottom: 16px;">
+              <div class="form-field" style="margin-bottom: 10px;">
+                <label for="custom-google-email" style="font-size: 12px; font-weight: 600; color: #475569;">Your Google Email</label>
+                <input type="email" id="custom-google-email" placeholder="you@gmail.com" style="width: 100%; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px;" required />
+              </div>
+              <div class="form-field" style="margin-bottom: 12px;">
+                <label for="custom-google-name" style="font-size: 12px; font-weight: 600; color: #475569;">Full Name (optional)</label>
+                <input type="text" id="custom-google-name" placeholder="First & Last Name" style="width: 100%; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px;" />
+              </div>
+              <button type="submit" class="btn btn-primary btn-block" style="padding: 10px; font-size: 13px;">
+                Continue with this Google Account
+              </button>
+            </form>
+
+            <div class="google-dialog-footer-text">
+              To continue, Google will share your name, email address, language preference, and profile picture with Breathe Clean. Before using this app, review their <a href="#" onclick="return false;">Privacy Policy</a> and <a href="#" onclick="return false;">Terms of Service</a>.
+            </div>
           </div>
         </div>
       </div>
