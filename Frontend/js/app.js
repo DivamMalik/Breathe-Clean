@@ -1392,6 +1392,8 @@ const App = {
     const cancelBtn = document.getElementById('btn-cancel-space-modal');
     const form = document.getElementById('form-space-modal');
 
+    let currentStep = 1;
+
     const closeModal = () => {
       if (container) container.innerHTML = '';
     };
@@ -1404,18 +1406,144 @@ const App = {
       });
     }
 
+    // Step switching function
+    const goToStep = (stepNumber) => {
+      if (stepNumber < 1 || stepNumber > 4) return;
+      currentStep = stepNumber;
+
+      // Update stepper tabs
+      document.querySelectorAll('.modal-step-tab').forEach(tab => {
+        const step = parseInt(tab.dataset.step, 10);
+        const pill = tab.querySelector('.step-num-pill');
+        tab.classList.remove('active', 'completed');
+        if (step === currentStep) {
+          tab.classList.add('active');
+          if (pill) pill.textContent = step;
+        } else if (step < currentStep) {
+          tab.classList.add('completed');
+          if (pill) pill.innerHTML = Utils.icons.check;
+        } else {
+          if (pill) pill.textContent = step;
+        }
+      });
+
+      // Update Header Title & Subtitle
+      const titleEl = document.getElementById('space-modal-title');
+      const subtitleEl = document.getElementById('space-modal-subtitle');
+      const baseAction = roomToEdit ? 'Edit space' : 'Add a space';
+      if (titleEl) {
+        titleEl.textContent = `${baseAction} — ${currentStep === 1 ? 'Basic info' : currentStep === 2 ? 'Room details' : currentStep === 3 ? 'Devices' : 'Review'}`;
+      }
+      if (subtitleEl) {
+        if (currentStep === 1) subtitleEl.textContent = 'Enter basic information about your room and occupancy.';
+        else if (currentStep === 2) subtitleEl.textContent = 'Specify physical room dimensions, ceiling height, and apertures.';
+        else if (currentStep === 3) subtitleEl.textContent = 'Configure connected smart windows, ventilation, and air filtration.';
+        else if (currentStep === 4) subtitleEl.textContent = 'Review space specifications and environmental compliance before saving.';
+      }
+
+      // Toggle Step Panes
+      for (let i = 1; i <= 4; i++) {
+        const pane = document.getElementById(`space-step-pane-${i}`);
+        if (pane) {
+          pane.style.display = i === currentStep ? 'block' : 'none';
+        }
+      }
+
+      // Calculations for Step 2
+      if (currentStep === 2) {
+        updateDimensionsPreview();
+      }
+
+      // Live Review Population for Step 4
+      if (currentStep === 4) {
+        populateReviewStep();
+      }
+    };
+
+    const updateDimensionsPreview = () => {
+      const l = parseFloat(document.getElementById('room-input-length')?.value) || 0;
+      const w = parseFloat(document.getElementById('room-input-width')?.value) || 0;
+      const h = parseFloat(document.getElementById('room-input-height')?.value) || 0;
+      const areaEl = document.getElementById('calc-area-preview');
+      const volEl = document.getElementById('calc-volume-preview');
+      if (areaEl) areaEl.textContent = (l * w).toFixed(1) + ' m²';
+      if (volEl) volEl.textContent = (l * w * h).toFixed(1) + ' m³';
+    };
+
+    const populateReviewStep = () => {
+      const nameVal = document.getElementById('room-input-name')?.value.trim() || 'Unnamed Space';
+      const typeVal = document.getElementById('room-input-type')?.value || 'Room';
+      const l = parseFloat(document.getElementById('room-input-length')?.value) || 0;
+      const w = parseFloat(document.getElementById('room-input-width')?.value) || 0;
+      const h = parseFloat(document.getElementById('room-input-height')?.value) || 0;
+      const winVal = document.getElementById('room-input-windows')?.value || 0;
+      const doorsVal = document.getElementById('room-input-doors')?.value || 1;
+      const occVal = parseInt(document.getElementById('room-input-occupants')?.value, 10) || 1;
+      const area = Number((l * w).toFixed(1));
+      const volume = Number((l * w * h).toFixed(1));
+      const ashraeTarget = Math.round(occVal * 18 + area * 1.08);
+
+      const revName = document.getElementById('review-val-name');
+      const revType = document.getElementById('review-val-type');
+      const revGeom = document.getElementById('review-val-geometry');
+      const revDims = document.getElementById('review-val-dims');
+      const revEnv = document.getElementById('review-val-envelope');
+      const revOcc = document.getElementById('review-val-occupants');
+      const revAshrae = document.getElementById('review-val-ashrae');
+
+      if (revName) revName.textContent = nameVal;
+      if (revType) revType.textContent = typeVal;
+      if (revGeom) revGeom.textContent = `${area} m² · ${volume} m³`;
+      if (revDims) revDims.textContent = `${l}m (L) × ${w}m (W) × ${h}m (H)`;
+      if (revEnv) revEnv.textContent = `${winVal} Windows · ${doorsVal} Doors`;
+      if (revOcc) revOcc.textContent = `${occVal} Occupants`;
+      if (revAshrae) revAshrae.textContent = `~${ashraeTarget} m³/h`;
+    };
+
+    // Attach click events to Stepper Tabs (Room details, Devices, Review)
+    document.querySelectorAll('.modal-step-tab').forEach(tab => {
+      tab.addEventListener('click', (e) => {
+        e.preventDefault();
+        const step = parseInt(tab.dataset.step, 10);
+        if (step) goToStep(step);
+      });
+    });
+
+    // Attach Next & Back buttons
+    const next1 = document.getElementById('btn-step-next-1');
+    if (next1) next1.addEventListener('click', () => goToStep(2));
+
+    const prev2 = document.getElementById('btn-step-prev-2');
+    if (prev2) prev2.addEventListener('click', () => goToStep(1));
+    const next2 = document.getElementById('btn-step-next-2');
+    if (next2) next2.addEventListener('click', () => goToStep(3));
+
+    const prev3 = document.getElementById('btn-step-prev-3');
+    if (prev3) prev3.addEventListener('click', () => goToStep(2));
+    const next3 = document.getElementById('btn-step-next-3');
+    if (next3) next3.addEventListener('click', () => goToStep(4));
+
+    const prev4 = document.getElementById('btn-step-prev-4');
+    if (prev4) prev4.addEventListener('click', () => goToStep(3));
+
+    // Live update calculations on dimension input change
+    ['room-input-length', 'room-input-width', 'room-input-height'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('input', updateDimensionsPreview);
+    });
+
     if (form) {
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
         const editId = form.dataset.editId;
-        const name = document.getElementById('room-input-name').value.trim();
-        const type = document.getElementById('room-input-type').value;
-        const length = parseFloat(document.getElementById('room-input-length').value);
-        const width = parseFloat(document.getElementById('room-input-width').value);
-        const ceilingHeight = parseFloat(document.getElementById('room-input-height').value);
-        const windowsCount = parseInt(document.getElementById('room-input-windows').value, 10);
-        const doorsCount = parseInt(document.getElementById('room-input-doors').value, 10);
-        const typicalOccupants = parseInt(document.getElementById('room-input-occupants').value, 10);
+        const name = document.getElementById('room-input-name')?.value.trim() || 'New Space';
+        const type = document.getElementById('room-input-type')?.value || 'Room';
+        const length = parseFloat(document.getElementById('room-input-length')?.value) || 4.5;
+        const width = parseFloat(document.getElementById('room-input-width')?.value) || 3.0;
+        const ceilingHeight = parseFloat(document.getElementById('room-input-height')?.value) || 2.8;
+        const windowsCount = parseInt(document.getElementById('room-input-windows')?.value, 10) || 1;
+        const doorsCount = parseInt(document.getElementById('room-input-doors')?.value, 10) || 1;
+        const typicalOccupants = parseInt(document.getElementById('room-input-occupants')?.value, 10) || 2;
 
         if (editId) {
           await State.updateRoom(editId, {
@@ -1429,7 +1557,7 @@ const App = {
             doorsCount,
             typicalOccupants
           });
-          Utils.showToast('Space updated successfully', 'success');
+          Utils.showToast(`Space "${name}" updated successfully`, 'success');
         } else {
           await State.addRoom({
             name,
@@ -1441,7 +1569,7 @@ const App = {
             doorsCount,
             typicalOccupants
           });
-          Utils.showToast(`Space "${name}" created`, 'success');
+          Utils.showToast(`Space "${name}" created successfully`, 'success');
         }
 
         closeModal();

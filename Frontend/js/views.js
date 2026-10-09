@@ -1641,7 +1641,7 @@ const Views = {
         <div class="modal-dialog modal-space-dialog">
           <div class="modal-sidebar-stepper">
             <div class="modal-step-tab active" data-step="1">
-              <span class="step-num-pill">${Utils.icons.check}</span>
+              <span class="step-num-pill">1</span>
               <span>Basic info</span>
             </div>
             <div class="modal-step-tab" data-step="2">
@@ -1661,68 +1661,210 @@ const Views = {
           <div class="modal-main-content">
             <div class="modal-header">
               <div>
-                <h3 class="modal-title">${isEdit ? 'Edit space' : 'Add a space'}</h3>
-                <p class="modal-subtitle">Enter basic information about your room.</p>
+                <h3 class="modal-title" id="space-modal-title">${isEdit ? 'Edit space' : 'Add a space'}</h3>
+                <p class="modal-subtitle" id="space-modal-subtitle">Enter basic information about your room.</p>
               </div>
               <button class="modal-close-btn" id="btn-close-space-modal" aria-label="Close modal">&times;</button>
             </div>
 
             <form id="form-space-modal" data-edit-id="${isEdit ? roomToEdit.id : ''}">
-              <div class="modal-form-fields">
-                <div class="form-field">
-                  <label for="room-input-name">Room name</label>
-                  <input type="text" id="room-input-name" value="${Utils.escapeHtml(name)}" required />
-                </div>
-
-                <div class="form-field">
-                  <label for="room-input-type">Room type</label>
-                  <select id="room-input-type" class="settings-select">
-                    <option value="Bedroom" ${type === 'Bedroom' ? 'selected' : ''}>Bedroom</option>
-                    <option value="Living Room" ${type === 'Living Room' ? 'selected' : ''}>Living Room</option>
-                    <option value="Study" ${type === 'Study' ? 'selected' : ''}>Study</option>
-                    <option value="Office" ${type === 'Office' ? 'selected' : ''}>Office</option>
-                    <option value="Classroom" ${type === 'Classroom' ? 'selected' : ''}>Classroom</option>
-                  </select>
-                </div>
-
-                <div class="form-row-2">
+              <!-- STEP 1: Basic Info -->
+              <div class="space-step-pane" id="space-step-pane-1">
+                <div class="modal-form-fields">
                   <div class="form-field">
-                    <label for="room-input-length">Length (m)</label>
-                    <input type="number" step="0.1" id="room-input-length" value="${length}" required />
+                    <label for="room-input-name">Room name</label>
+                    <input type="text" id="room-input-name" value="${Utils.escapeHtml(name)}" placeholder="e.g. Master Bedroom" required />
                   </div>
+
                   <div class="form-field">
-                    <label for="room-input-width">Width (m)</label>
-                    <input type="number" step="0.1" id="room-input-width" value="${width}" required />
+                    <label for="room-input-type">Room type / Usage</label>
+                    <select id="room-input-type" class="settings-select">
+                      <option value="Bedroom" ${type === 'Bedroom' ? 'selected' : ''}>Bedroom</option>
+                      <option value="Living Room" ${type === 'Living Room' ? 'selected' : ''}>Living Room</option>
+                      <option value="Study" ${type === 'Study' ? 'selected' : ''}>Study / Home Office</option>
+                      <option value="Office" ${type === 'Office' ? 'selected' : ''}>Commercial Office</option>
+                      <option value="Classroom" ${type === 'Classroom' ? 'selected' : ''}>Classroom</option>
+                    </select>
+                  </div>
+
+                  <div class="form-field">
+                    <label for="room-input-occupants">Typical occupants</label>
+                    <input type="number" id="room-input-occupants" value="${occupants}" min="1" max="50" required />
+                    <span class="field-hint" style="font-size:11px; color:#64748b; margin-top:4px;">Determines ASHRAE 62.1 per-person baseline fresh airflow rate (~18 m³/h per person).</span>
                   </div>
                 </div>
 
-                <div class="form-field">
-                  <label for="room-input-height">Ceiling height (m)</label>
-                  <input type="number" step="0.1" id="room-input-height" value="${ceilingHeight}" required />
-                </div>
-
-                <div class="form-row-2">
-                  <div class="form-field">
-                    <label for="room-input-windows">Windows</label>
-                    <input type="number" id="room-input-windows" value="${windows}" min="0" required />
-                  </div>
-                  <div class="form-field">
-                    <label for="room-input-doors">Doors</label>
-                    <input type="number" id="room-input-doors" value="${doors}" min="1" required />
-                  </div>
-                </div>
-
-                <div class="form-field">
-                  <label for="room-input-occupants">Typical occupants</label>
-                  <input type="number" id="room-input-occupants" value="${occupants}" min="1" required />
+                <div class="modal-footer">
+                  <button type="button" class="btn btn-outline" id="btn-cancel-space-modal">Cancel</button>
+                  <button type="button" class="btn btn-primary" id="btn-step-next-1">
+                    <span>Next: Room details</span> ${Utils.icons.arrowRight}
+                  </button>
                 </div>
               </div>
 
-              <div class="modal-footer">
-                <button type="button" class="btn btn-outline" id="btn-cancel-space-modal">Cancel</button>
-                <button type="submit" class="btn btn-primary" id="btn-submit-space-modal">
-                  <span>${isEdit ? 'Save Changes' : 'Create Space'}</span> ${Utils.icons.arrowRight}
-                </button>
+              <!-- STEP 2: Room Details & Geometry -->
+              <div class="space-step-pane" id="space-step-pane-2" style="display: none;">
+                <div class="modal-form-fields">
+                  <div class="form-row-2">
+                    <div class="form-field">
+                      <label for="room-input-length">Length (meters)</label>
+                      <input type="number" step="0.1" id="room-input-length" value="${length}" min="1" required />
+                    </div>
+                    <div class="form-field">
+                      <label for="room-input-width">Width (meters)</label>
+                      <input type="number" step="0.1" id="room-input-width" value="${width}" min="1" required />
+                    </div>
+                  </div>
+
+                  <div class="form-field">
+                    <label for="room-input-height">Ceiling height (meters)</label>
+                    <input type="number" step="0.1" id="room-input-height" value="${ceilingHeight}" min="1.8" max="10" required />
+                  </div>
+
+                  <!-- Live Calculated Geometry Box -->
+                  <div class="calc-metrics-row">
+                    <div class="calc-metric-box">
+                      <span class="calc-metric-label">Floor Area</span>
+                      <span class="calc-metric-val" id="calc-area-preview">${(length * width).toFixed(1)} m²</span>
+                    </div>
+                    <div class="calc-metric-box">
+                      <span class="calc-metric-label">Air Volume</span>
+                      <span class="calc-metric-val" id="calc-volume-preview">${(length * width * ceilingHeight).toFixed(1)} m³</span>
+                    </div>
+                  </div>
+
+                  <div class="form-row-2">
+                    <div class="form-field">
+                      <label for="room-input-windows">Windows (apertures)</label>
+                      <input type="number" id="room-input-windows" value="${windows}" min="0" required />
+                    </div>
+                    <div class="form-field">
+                      <label for="room-input-doors">Doors</label>
+                      <input type="number" id="room-input-doors" value="${doors}" min="1" required />
+                    </div>
+                  </div>
+                </div>
+
+                <div class="modal-footer">
+                  <button type="button" class="btn btn-outline" id="btn-step-prev-2">Back</button>
+                  <button type="button" class="btn btn-primary" id="btn-step-next-2">
+                    <span>Next: Devices</span> ${Utils.icons.arrowRight}
+                  </button>
+                </div>
+              </div>
+
+              <!-- STEP 3: Devices & Actuators -->
+              <div class="space-step-pane" id="space-step-pane-3" style="display: none;">
+                <div class="devices-config-grid">
+                  <div class="device-config-item">
+                    <div class="device-config-left">
+                      <div class="device-config-icon">${Utils.icons.window}</div>
+                      <div>
+                        <div class="device-config-title">Smart Motorized Windows</div>
+                        <div class="device-config-desc">Autonomous natural displacement draft & perimeter seal.</div>
+                      </div>
+                    </div>
+                    <label class="checkbox-label">
+                      <input type="checkbox" id="device-opt-window" checked />
+                      <span>Connected</span>
+                    </label>
+                  </div>
+
+                  <div class="device-config-item">
+                    <div class="device-config-left">
+                      <div class="device-config-icon">${Utils.icons.fan}</div>
+                      <div>
+                        <div class="device-config-title">Intelligent Ventilation (ERV)</div>
+                        <div class="device-config-desc">Balanced energy-recovery fresh air exchange.</div>
+                      </div>
+                    </div>
+                    <label class="checkbox-label">
+                      <input type="checkbox" id="device-opt-vent" checked />
+                      <span>Connected</span>
+                    </label>
+                  </div>
+
+                  <div class="device-config-item">
+                    <div class="device-config-left">
+                      <div class="device-config-icon">${Utils.icons.purifier}</div>
+                      <div>
+                        <div class="device-config-title">HEPA Air Purifier</div>
+                        <div class="device-config-desc">High-CADR particulate scrubbing against PM2.5.</div>
+                      </div>
+                    </div>
+                    <label class="checkbox-label">
+                      <input type="checkbox" id="device-opt-purifier" checked />
+                      <span>Connected</span>
+                    </label>
+                  </div>
+
+                  <div class="device-config-item">
+                    <div class="device-config-left">
+                      <div class="device-config-icon">${Utils.icons.activity}</div>
+                      <div>
+                        <div class="device-config-title">Senseair NDIR + Optical Sensor Suite</div>
+                        <div class="device-config-desc">Continuous CO₂, PM2.5, temperature & humidity telemetry.</div>
+                      </div>
+                    </div>
+                    <span class="device-status-badge badge-green" style="font-size: 11px;">Active Telemetry</span>
+                  </div>
+                </div>
+
+                <div class="modal-footer">
+                  <button type="button" class="btn btn-outline" id="btn-step-prev-3">Back</button>
+                  <button type="button" class="btn btn-primary" id="btn-step-next-3">
+                    <span>Next: Review</span> ${Utils.icons.arrowRight}
+                  </button>
+                </div>
+              </div>
+
+              <!-- STEP 4: Review -->
+              <div class="space-step-pane" id="space-step-pane-4" style="display: none;">
+                <div class="review-summary-card">
+                  <div class="review-summary-header">
+                    <div class="review-room-name-badge">
+                      <span class="review-name-text" id="review-val-name">${Utils.escapeHtml(name)}</span>
+                      <span class="review-type-pill" id="review-val-type">${type}</span>
+                    </div>
+                    <span class="device-status-badge badge-green">Ready to Deploy</span>
+                  </div>
+
+                  <div class="review-grid-details">
+                    <div class="review-item">
+                      <span class="review-label">Floor Area & Volume</span>
+                      <span class="review-val" id="review-val-geometry">${(length * width).toFixed(1)} m² · ${(length * width * ceilingHeight).toFixed(1)} m³</span>
+                    </div>
+                    <div class="review-item">
+                      <span class="review-label">Dimensions</span>
+                      <span class="review-val" id="review-val-dims">${length}m (L) × ${width}m (W) × ${ceilingHeight}m (H)</span>
+                    </div>
+                    <div class="review-item">
+                      <span class="review-label">Envelope Apertures</span>
+                      <span class="review-val" id="review-val-envelope">${windows} Windows · ${doors} Doors</span>
+                    </div>
+                    <div class="review-item">
+                      <span class="review-label">Occupancy Load</span>
+                      <span class="review-val" id="review-val-occupants">${occupants} Occupants</span>
+                    </div>
+                  </div>
+
+                  <div class="review-ashrae-banner">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                      ${Utils.icons.shieldCheck}
+                      <div>
+                        <strong>ASHRAE 62.1-2022 Ventilation Baseline:</strong>
+                        <div style="font-size: 11px; opacity: 0.9;">Required baseline delivery: <strong id="review-val-ashrae">~${Math.round(occupants * 18 + (length * width) * 1.08)} m³/h</strong></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="modal-footer">
+                  <button type="button" class="btn btn-outline" id="btn-step-prev-4">Back</button>
+                  <button type="submit" class="btn btn-primary" id="btn-submit-space-modal">
+                    <span>${isEdit ? 'Save Changes' : 'Create Space'}</span> ${Utils.icons.check}
+                  </button>
+                </div>
               </div>
             </form>
           </div>
