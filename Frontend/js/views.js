@@ -2087,13 +2087,12 @@ const Views = {
     const messages = Chatbot.messages || [];
 
     const promptSuggestions = [
-      'Switch to Manual mode',
-      'Turn purifier to High',
-      'Simulate outdoor smog (AQI 175)',
+      'Apply the current safety policy',
+      'Turn purifier on',
+      'Simulate outdoor pollution',
       'Why are the windows closed?',
-      'Switch to Living Room',
-      'Open the windows',
-      'Set CO₂ to 1,350 ppm',
+      'Check my saved location and outdoor AQI',
+      'Simulate high CO₂',
       'Go to Analytics'
     ];
 
@@ -2105,7 +2104,7 @@ const Views = {
               <span class="assistant-sparkle-badge">${Utils.icons.sparkles}</span>
               <h2 class="page-title">AI Assistant & Co-Pilot</h2>
             </div>
-            <p class="page-subtitle">Autonomous environmental orchestration with live account and hardware actuation.</p>
+            <p class="page-subtitle">Ask about your account readings, safety decisions, and supported backend controls.</p>
           </div>
           <div class="assistant-header-actions">
             <span class="assistant-context-pill">
@@ -2134,7 +2133,7 @@ const Views = {
             ${messages.map(m => `
               <div class="chat-message-row msg-${m.sender}">
                 <div class="chat-avatar">
-                  ${m.sender === 'bot' ? Utils.icons.sparkles : (State.user ? State.user.name.charAt(0).toUpperCase() : 'U')}
+                  ${m.sender === 'bot' ? Utils.icons.sparkles : (State.user?.name?.charAt(0)?.toUpperCase() || 'U')}
                 </div>
                 <div class="chat-bubble">
                   <div class="chat-meta">
@@ -2145,8 +2144,8 @@ const Views = {
                     ${this.formatChatMessage(m.text)}
                   </div>
                   ${m.actionTag ? `
-                    <div class="chat-action-badge">
-                      <span class="badge-icon">✓</span>
+                    <div class="chat-action-badge ${m.actionTag === 'Request failed' ? 'action-failed' : ''}">
+                      <span class="badge-icon">${m.actionTag === 'Request failed' ? '!' : '✓'}</span>
                       <span class="badge-tag">${Utils.escapeHtml(m.actionTag)}:</span>
                       <span class="badge-detail">${Utils.escapeHtml(m.actionDetails || '')}</span>
                     </div>
@@ -2162,7 +2161,7 @@ const Views = {
               <textarea 
                 id="assistant-prompt-input" 
                 class="composer-textarea" 
-                placeholder="Give a prompt to control devices, switch modes, adjust simulation, or ask about air quality..." 
+                placeholder="Ask about your readings, safety decisions, or supported controls..."
                 rows="1" 
                 required
               ></textarea>
@@ -2171,7 +2170,7 @@ const Views = {
               </button>
             </div>
             <div class="composer-footnote">
-              <span>Supports real-time device control, mode switching, space creation, telemetry simulation, and settings adjustment.</span>
+              <span>Backend controls remain subject to sensor safety validation. Physical hardware actuation is not confirmed.</span>
               <span class="keyboard-hint">Press Enter to send</span>
             </div>
           </form>
@@ -2198,7 +2197,7 @@ const Views = {
               <span class="drawer-icon">${Utils.icons.sparkles}</span>
               <div>
                 <strong>Breathe Clean Co-Pilot</strong>
-                <span class="drawer-sub">Autonomous Actuation</span>
+                <span class="drawer-sub">Account Assistant</span>
               </div>
             </div>
             <div class="drawer-head-actions">
@@ -2212,10 +2211,10 @@ const Views = {
           </div>
 
           <div class="floating-drawer-suggestions">
-            <button class="mini-chip" data-prompt="Turn purifier to High">Purifier High</button>
-            <button class="mini-chip" data-prompt="Switch to Manual mode">Manual Mode</button>
+            <button class="mini-chip" data-prompt="Turn purifier on">Purifier On</button>
+            <button class="mini-chip" data-prompt="Apply the current safety policy">Apply Policy</button>
             <button class="mini-chip" data-prompt="Why are windows closed?">Why closed?</button>
-            <button class="mini-chip" data-prompt="Simulate outdoor smog (AQI 175)">Smog Spike</button>
+            <button class="mini-chip" data-prompt="Simulate outdoor pollution">Smog Spike</button>
           </div>
 
           <div class="floating-drawer-body" id="floating-drawer-messages">
@@ -2226,7 +2225,7 @@ const Views = {
             <input 
               type="text" 
               id="floating-prompt-input" 
-              placeholder="Ask anything or command hardware..." 
+              placeholder="Ask about your readings, safety decisions, or supported controls..."
               autocomplete="off" 
               required
             />

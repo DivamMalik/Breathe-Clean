@@ -291,12 +291,49 @@ test("registration stores the submitted account name and creates its authenticat
   });
   assert.equal(response.status, 201);
   assert.equal(response.body.user.name, "Test Account");
-  assert.match(response.headers.get("set-cookie"), /breathe\.sid=/);
+  const setCookie = response.headers.get("set-cookie");
+  assert.match(setCookie, /breathe\.sid=/);
   const sessionCount = database.prepare(
     "SELECT COUNT(*) AS count FROM user_sessions"
   ).get().count;
   assert.equal(sessionCount, 1);
-  assert.equal(getUserByEmail("named@example.com").name, "Test Account");
+  const storedUser = getUserByEmail("named@example.com");
+  assert.equal(storedUser.name, "Test Account");
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM users").get().count, 1);
+  assert.equal(
+    database.prepare("SELECT COUNT(*) AS count FROM user_setups WHERE user_id = ?")
+      .get(response.body.user.id).count,
+    1
+  );
+
+  const setup = await requestJson("/account/setup", {
+    headers: { cookie: setCookie.split(";", 1)[0] }
+  });
+  assert.equal(setup.status, 200);
+  assert.deepEqual(setup.body.setup, {
+    setupCompleted: false,
+    rooms: [],
+    devices: { window: false, ventilation: false, purifier: false },
+    preferences: null,
+    location: null,
+    outdoorAirQuality: null
+  });
+  const authenticatedUser = await requestJson("/test/private", {
+    headers: { cookie: setCookie.split(";", 1)[0] }
+  });
+  assert.equal(authenticatedUser.status, 200);
+  assert.equal(authenticatedUser.body.user.name, "Test Account");
+
+  const login = await requestJson("/auth/login", {
+    method: "POST",
+    body: {
+      email: "named@example.com",
+      password: "correct horse battery staple"
+    }
+  });
+  assert.equal(login.status, 200);
+  assert.equal(login.body.user.name, "Test Account");
+  assert.match(login.headers.get("set-cookie"), /breathe\.sid=/);
 });
 
 test("registration rejects duplicate emails after normalization", async () => {
@@ -325,6 +362,7 @@ test("registration rejects invalid credentials and unexpected fields", async () 
     { email: "person@example.com", password: `${"a".repeat(71)}é` },
     { name: 42, email: "person@example.com", password: "correct horse battery staple" },
     { name: "   ", email: "person@example.com", password: "correct horse battery staple" },
+    { name: "x".repeat(101), email: "person@example.com", password: "correct horse battery staple" },
     { email: "person@example.com", password: "correct horse battery staple", role: "admin" }
   ];
 

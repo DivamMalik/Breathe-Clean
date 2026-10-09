@@ -83,18 +83,25 @@ test("signup uses the mounted auth route, then loads the clean setup using its s
     requests.map(({ url, options }) => ({
       url,
       method: options.method || "GET",
-      credentials: options.credentials
+      credentials: options.credentials,
+      body: options.body ? JSON.parse(options.body) : undefined
     })),
     [
       {
         url: "http://localhost:5001/api/auth/register",
         method: "POST",
-        credentials: "include"
+        credentials: "include",
+        body: {
+          name: "New User",
+          email: "new@example.com",
+          password: "correct horse battery staple"
+        }
       },
       {
         url: "http://localhost:5001/api/account/setup",
         method: "GET",
-        credentials: "include"
+        credentials: "include",
+        body: undefined
       }
     ]
   );
@@ -120,6 +127,40 @@ test("signup surfaces duplicate-registration errors without attempting login", a
   assert.equal(requests.length, 1);
   assert.equal(requests[0].url, "http://localhost:5001/api/auth/register");
   assert.equal(requests[0].options.method, "POST");
+});
+
+test("session restoration keeps the account full name while hydrating setup", async () => {
+  const requests = [];
+  const setup = {
+    setupCompleted: false,
+    rooms: [],
+    devices: { window: false, ventilation: false, purifier: false },
+    preferences: null,
+    location: null,
+    outdoorAirQuality: null
+  };
+  const api = createApi(async (url, options) => {
+    requests.push({ url, options });
+    return jsonResponse(200, {
+      success: true,
+      hasSetup: true,
+      setupComplete: false,
+      setup
+    });
+  });
+  api.testLocalStorage.setItem("breatheclean_user", JSON.stringify({
+    id: 36,
+    name: "Restored Account",
+    email: "restored@example.com"
+  }));
+
+  const user = await api.restoreAccountSetup();
+
+  assert.equal(user.name, "Restored Account");
+  assert.equal(user.isOnboarded, false);
+  assert.equal(requests[0].url, "http://localhost:5001/api/account/setup");
+  assert.equal(requests[0].options.credentials, "include");
+  assert.equal(JSON.parse(api.testLocalStorage.getItem("breatheclean_user")).name, "Restored Account");
 });
 
 test("signup explains when registration succeeded but setup loading failed", async () => {

@@ -23,9 +23,6 @@ const Chatbot = {
     const nextAccountId = accountId === null || accountId === undefined
       ? null
       : String(accountId);
-    if (this.accountId && this.accountId !== nextAccountId) {
-      localStorage.removeItem(`${this.storageKey}:${encodeURIComponent(this.accountId)}`);
-    }
     this.accountId = nextAccountId;
     this.messages = [];
     const storageKey = this.accountId
@@ -87,6 +84,7 @@ const Chatbot = {
   async sendUserPrompt(promptText) {
     if (!promptText || !promptText.trim()) return;
 
+    const accountId = this.accountId;
     const trimmed = promptText.trim();
     const userMsg = {
       id: Utils.generateId('msg_user'),
@@ -103,11 +101,13 @@ const Chatbot = {
       reply = await this.interpretAndExecute(trimmed);
     } catch (error) {
       reply = {
-        text: `The backend did not apply that action: ${error.message}`,
-        actionTag: 'Action Not Applied',
+        text: `I couldn't complete that request: ${error.message}`,
+        actionTag: 'Request failed',
         actionDetails: error.message
       };
     }
+
+    if (accountId !== this.accountId) return;
 
     const botMsg = {
       id: Utils.generateId('msg_bot'),
@@ -121,6 +121,35 @@ const Chatbot = {
     this.save();
 
     return botMsg;
+  },
+
+  confirmedBackendState(result, field, expected) {
+    if (result?.success !== true || result.deviceState?.[field] !== expected) {
+      throw new Error('The backend did not confirm the requested device state.');
+    }
+    return result.deviceState;
+  },
+
+  getSavedOutdoorAirQuality() {
+    const user = API.getCurrentUser();
+    if (!user || String(user.id) !== this.accountId) return null;
+    const setup = API.getCachedAccountSetup();
+    const location = setup?.location;
+    const airQuality = setup?.outdoorAirQuality;
+    if (
+      !location ||
+      !airQuality ||
+      !Number.isFinite(location.latitude) ||
+      !Number.isFinite(location.longitude) ||
+      airQuality.latitude !== location.latitude ||
+      airQuality.longitude !== location.longitude ||
+      !Number.isFinite(airQuality.aqi) ||
+      typeof airQuality.lastUpdated !== 'string' ||
+      Number.isNaN(Date.parse(airQuality.lastUpdated))
+    ) {
+      return null;
+    }
+    return { location, airQuality };
   },
 
   async interpretAndExecute(query) {
@@ -141,11 +170,14 @@ const Chatbot = {
 
     if (q.includes('auto mode') || q.includes('switch to auto') || q.includes('set mode to auto') || q.includes('enable auto') || q.includes('automatic mode') || q.includes('resume auto')) {
       if (activeRoom) {
-        await State.applyDashboardDecision();
+        const result = await State.applyDashboardDecision();
+        if (result?.applied !== true) {
+          throw new Error('The backend did not confirm applying its safety decision.');
+        }
         Utils.showToast('Backend safety policy applied', 'success');
         return {
-          text: `The backend evaluated current global sensor readings and applied its validated device decision. This is a one-time policy application; persistent AUTO mode is not available.`,
-          actionTag: 'Policy Applied',
+          text: `The backend evaluated this account's sensor readings and confirmed its validated device state. This is a one-time backend update; persistent AUTO mode and physical hardware actuation are not available.`,
+          actionTag: 'Backend Policy Confirmed',
           actionDetails: `Validated backend decision for ${activeRoom.name}`
         };
       }
@@ -158,12 +190,13 @@ const Chatbot = {
       if (activeRoom) {
         const winDev = activeRoom.devices.find(d => d.type === 'window');
         if (winDev) {
-          await State.setDeviceStateManual(activeRoom.id, winDev.id, 'Open');
-          Utils.showToast(`Smart Windows opened in ${activeRoom.name}`, 'success');
+          const result = await State.setDeviceStateManual(activeRoom.id, winDev.id, 'Open');
+          this.confirmedBackendState(result, 'windows', 'OPEN');
+          Utils.showToast(`Backend window state updated for ${activeRoom.name}`, 'success');
           return {
-            text: `The backend accepted the safe request to open the **Smart Windows** in **${activeRoom.name}**.`,
-            actionTag: 'Device Actuated',
-            actionDetails: `Smart Windows → Open (${activeRoom.name})`
+            text: `The backend confirmed the window state as **OPEN** for **${activeRoom.name}**. Physical hardware actuation is not connected or confirmed.`,
+            actionTag: 'Backend State Confirmed',
+            actionDetails: `Smart Windows → OPEN (${activeRoom.name}); hardware not confirmed`
           };
         }
       }
@@ -173,12 +206,13 @@ const Chatbot = {
       if (activeRoom) {
         const winDev = activeRoom.devices.find(d => d.type === 'window');
         if (winDev) {
-          await State.setDeviceStateManual(activeRoom.id, winDev.id, 'Closed');
-          Utils.showToast(`Smart Windows closed in ${activeRoom.name}`, 'info');
+          const result = await State.setDeviceStateManual(activeRoom.id, winDev.id, 'Closed');
+          this.confirmedBackendState(result, 'windows', 'CLOSED');
+          Utils.showToast(`Backend window state updated for ${activeRoom.name}`, 'info');
           return {
-            text: `Closed and sealed the **Smart Windows** in **${activeRoom.name}**. Boundary barrier active against outdoor air.`,
-            actionTag: 'Device Actuated',
-            actionDetails: `Smart Windows → Closed (${activeRoom.name})`
+            text: `The backend confirmed the window state as **CLOSED** for **${activeRoom.name}**. Physical hardware actuation is not connected or confirmed.`,
+            actionTag: 'Backend State Confirmed',
+            actionDetails: `Smart Windows → CLOSED (${activeRoom.name}); hardware not confirmed`
           };
         }
       }
@@ -197,12 +231,14 @@ const Chatbot = {
           else if (q.includes('low') || q.includes('quiet') || q.includes('whisper') || q.includes('standby')) targetState = 'Low';
           else if (q.includes('medium') || q.includes('normal') || q.includes('active') || q.includes('turn on')) targetState = 'Active';
 
-          await State.setDeviceStateManual(activeRoom.id, purDev.id, targetState);
-          Utils.showToast(`Air Purifier set to ${targetState}`, 'success');
+          const result = await State.setDeviceStateManual(activeRoom.id, purDev.id, targetState);
+          const expectedState = targetState === 'Off' ? 'OFF' : 'ON';
+          this.confirmedBackendState(result, 'purifier', expectedState);
+          Utils.showToast(`Backend purifier state updated for ${activeRoom.name}`, 'success');
           return {
-            text: `The backend accepted the safe Air Purifier ${targetState === 'Off' ? 'OFF' : 'ON'} request for **${activeRoom.name}**.`,
-            actionTag: 'Device Actuated',
-            actionDetails: `Air Purifier → ${targetState} (${activeRoom.name})`
+            text: `The backend confirmed the Air Purifier state as **${expectedState}** for **${activeRoom.name}**. Physical hardware actuation is not connected or confirmed.`,
+            actionTag: 'Backend State Confirmed',
+            actionDetails: `Air Purifier → ${expectedState} (${activeRoom.name}); hardware not confirmed`
           };
         }
       }
@@ -221,12 +257,14 @@ const Chatbot = {
           else if (q.includes('low') || q.includes('quiet') || q.includes('eco')) targetState = 'Low';
           else if (q.includes('normal') || q.includes('standard')) targetState = 'Normal';
 
-          await State.setDeviceStateManual(activeRoom.id, ventDev.id, targetState);
-          Utils.showToast(`Ventilation set to ${targetState}`, 'success');
+          const result = await State.setDeviceStateManual(activeRoom.id, ventDev.id, targetState);
+          const expectedState = targetState.toUpperCase();
+          this.confirmedBackendState(result, 'ventilation', expectedState);
+          Utils.showToast(`Backend ventilation state updated for ${activeRoom.name}`, 'success');
           return {
-            text: `The backend accepted the safe Ventilation setting **${targetState}** for **${activeRoom.name}**.`,
-            actionTag: 'Device Actuated',
-            actionDetails: `Ventilation → ${targetState} (${activeRoom.name})`
+            text: `The backend confirmed Ventilation as **${targetState}** for **${activeRoom.name}**. Physical hardware actuation is not connected or confirmed.`,
+            actionTag: 'Backend State Confirmed',
+            actionDetails: `Ventilation → ${targetState} (${activeRoom.name}); hardware not confirmed`
           };
         }
       }
@@ -313,7 +351,7 @@ const Chatbot = {
         });
         Utils.showToast(`Space "${newName}" created`, 'success');
         return {
-          text: `Created new space **${newSpace.name}** (14.4 m²). Autonomous environmental monitoring and smart device actuators have been calibrated.`,
+          text: `Saved the new space **${newSpace.name}** (${newSpace.area} m²) to your account. Sensor readings and physical device connections are not configured.`,
           actionTag: 'Space Created',
           actionDetails: `New Space: ${newSpace.name}`
         };
@@ -325,10 +363,10 @@ const Chatbot = {
     // -------------------------------------------------------------
     if (q.includes('smog') || q.includes('pollution spike') || q.includes('outdoor pollution') || q.includes('bad outdoor air')) {
       if (activeRoom) {
-        await State.applyDashboardScenario('pollution');
+        const result = await State.applyDashboardScenario('pollution');
         Utils.showToast('Backend outdoor-pollution scenario applied', 'warning');
         return {
-          text: `Applied the backend **Outdoor Pollution** scenario. The decision was validated and applied against the backend sensor rules. Scenario readings are global, not room-specific.`,
+          text: `The backend confirmed the **Outdoor Pollution** scenario for this account and saved its safety-validated device state. This changes simulated readings; no physical hardware action is confirmed.`,
           actionTag: 'Simulation Updated',
           actionDetails: 'Scenario: pollution'
         };
@@ -337,10 +375,10 @@ const Chatbot = {
 
     if (q.includes('fresh morning') || q.includes('fresh air') || q.includes('clean outdoor')) {
       if (activeRoom) {
-        await State.applyDashboardScenario('clean-air');
+        const result = await State.applyDashboardScenario('clean-air');
         Utils.showToast('Backend clean-air scenario applied', 'success');
         return {
-          text: `Applied the backend **Clean Air** scenario and its validated device decision. Scenario readings are global, not room-specific.`,
+          text: `The backend confirmed the **Clean Air** scenario for this account and saved its safety-validated device state. This changes simulated readings; no physical hardware action is confirmed.`,
           actionTag: 'Simulation Updated',
           actionDetails: 'Scenario: clean-air'
         };
@@ -349,10 +387,10 @@ const Chatbot = {
 
     if (q.includes('crowded') || q.includes('meeting') || q.includes('high co2') || q.includes('stuffy')) {
       if (activeRoom) {
-        await State.applyDashboardScenario('high-co2');
+        const result = await State.applyDashboardScenario('high-co2');
         Utils.showToast('Backend high-CO₂ scenario applied', 'info');
         return {
-          text: `Applied the backend **High CO₂** scenario and its validated device decision. Scenario readings are global, not room-specific.`,
+          text: `The backend confirmed the **High CO₂** scenario for this account and saved its safety-validated device state. This changes simulated readings; no physical hardware action is confirmed.`,
           actionTag: 'Simulation Updated',
           actionDetails: 'Scenario: high-co2'
         };
@@ -455,7 +493,7 @@ const Chatbot = {
       API.saveSettings(s);
       Utils.showToast('Air quality alerts disabled', 'info');
       return {
-        text: `Air quality notifications have been **Disabled**.`,
+        text: `Your air-quality notification preference has been set to **Disabled** in this browser. No push notification service is connected.`,
         actionTag: 'Settings Updated',
         actionDetails: `Notifications: OFF`
       };
@@ -484,21 +522,45 @@ const Chatbot = {
       }
     }
 
+    if (q.includes('saved location') || q.includes('my location') || q.includes('where am i')) {
+      const user = API.getCurrentUser();
+      const setup = user && String(user.id) === this.accountId
+        ? API.getCachedAccountSetup()
+        : null;
+      const location = setup?.location;
+      if (!location) {
+        return { text: 'No location has been saved for your account yet. Choose one in Setup Mode before requesting outdoor air quality.' };
+      }
+      const provider = this.getSavedOutdoorAirQuality();
+      const aqiSummary = provider
+        ? ` The latest saved provider AQI is ${provider.airQuality.aqi} (${provider.airQuality.category || 'category unavailable'}), updated ${new Date(provider.airQuality.lastUpdated).toLocaleString()}.`
+        : ' No provider AQI is currently saved for this location.';
+      return {
+        text: `Your saved location is **${location.placeName}** (${location.source === 'gps' ? 'GPS-detected' : 'manually selected'}).${aqiSummary}`
+      };
+    }
+
     // -------------------------------------------------------------
     // 10. CURRENT AIR QUALITY STATUS / SUMMARY REPORT
     // -------------------------------------------------------------
     if (q.includes('status') || q.includes('air quality') || q.includes('how is the air') || q.includes('report') || q.includes('summary')) {
       if (activeRoom) {
         const env = activeRoom.environment || {};
+        const outdoorContext = this.getSavedOutdoorAirQuality();
+        const outdoorProviderSummary = outdoorContext
+          ? `\n\n**Latest saved outdoor AQI provider reading:** ${outdoorContext.airQuality.aqi} (${outdoorContext.airQuality.category || 'category unavailable'}) at ${outdoorContext.location.placeName}. Source: ${outdoorContext.airQuality.source}; updated ${new Date(outdoorContext.airQuality.lastUpdated).toLocaleString()}.`
+          : '\n\nNo current provider AQI is saved for your account location.';
         if (!hasCompleteChatSensorReadings(env)) {
-          return { text: `Account telemetry for ${activeRoom.name} is unavailable. No sensor readings have been configured.` };
+          return {
+            text: `Account sensor telemetry for ${activeRoom.name} is unavailable. No sensor readings have been configured.${outdoorProviderSummary}`
+          };
         }
         const outStat = Utils.getAqiStatus(env.outdoorAQI);
         const inStat = Utils.getAqiStatus(env.indoorAQI);
         const co2Stat = Utils.getCo2Status(env.co2);
 
         return {
-          text: `### Environmental Telemetry for ${activeRoom.name}\n\n- **Outdoor AQI:** ${env.outdoorAQI} (${outStat.label})\n- **Indoor AQI:** ${env.indoorAQI} (${inStat.label})\n- **CO₂:** ${env.co2} ppm (${co2Stat.label})\n- **Temperature:** ${env.temperature}°C\n- **Humidity:** ${env.humidity}%\n- **Occupancy:** ${env.occupancy} person${env.occupancy > 1 ? 's' : ''}\n- **Operating Mode:** ${activeRoom.mode}`
+          text: `### Environmental Telemetry for ${activeRoom.name}\n\n- **Outdoor sensor AQI:** ${env.outdoorAQI} (${outStat.label})\n- **Indoor AQI:** ${env.indoorAQI} (${inStat.label})\n- **CO₂:** ${env.co2} ppm (${co2Stat.label})\n- **Temperature:** ${env.temperature}°C\n- **Humidity:** ${env.humidity}%\n- **Occupancy:** ${env.occupancy} person${env.occupancy > 1 ? 's' : ''}\n- **Operating Mode:** ${activeRoom.mode}${outdoorProviderSummary}`
         };
       }
     }
@@ -520,7 +582,7 @@ const Chatbot = {
 
     // Default friendly assistant fallback
     return {
-      text: `I've analyzed your request: *"${query}"*.\n\nYou can prompt me to control any function on Breathe Clean, such as:\n- **Modes:** *"Switch to Manual"* or *"Resume Auto mode"*\n- **Devices:** *"Turn purifier to High"*, *"Open windows"*, *"Filter ventilation"*\n- **Spaces:** *"Switch to Living Room"*, *"Add space Studio"*\n- **Simulation:** *"Simulate outdoor smog (AQI 180)"*, *"Set CO2 to 1200"*\n- **Navigation:** *"Go to Analytics"*, *"Open Simulation"*`
+      text: `I couldn't match *"${query}"* to a supported assistant action. You can ask about your saved location and available readings, request a safety-validated backend device-state update, run a supported simulation, or navigate to a view. Physical hardware actuation is not confirmed.`
     };
   }
 };

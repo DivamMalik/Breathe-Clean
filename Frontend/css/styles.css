@@ -4304,6 +4304,13 @@ input:checked + .slider-round:before {
   color: #166534;
 }
 
+.chat-action-badge.action-failed,
+.mini-action-tag.action-failed {
+  color: #b91c1c;
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
 .assistant-composer-form {
   padding: 14px 20px;
   background: #ffffff;
@@ -5317,6 +5324,5 @@ body:has(.view-assistant) .floating-assistant-wrapper {
     justify-content: center;
   }
 }
-
 
 

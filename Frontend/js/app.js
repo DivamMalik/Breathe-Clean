@@ -27,10 +27,12 @@ const App = {
       State.user = null;
       State.rooms = [];
       State.activeRoomId = null;
+      Chatbot.setAccount(null);
     } else if (hash === 'onboarding') {
       State.user = null;
       State.rooms = [];
       State.activeRoomId = null;
+      Chatbot.setAccount(null);
     }
 
     let restoreError = null;
@@ -42,7 +44,7 @@ const App = {
       } catch (error) {
         restoreError = error;
         API.clearRememberedUser();
-        Chatbot.clearHistory();
+        Chatbot.setAccount(null);
         State.user = null;
         State.rooms = [];
         State.activeRoomId = null;
@@ -72,12 +74,14 @@ const App = {
         State.rooms = [];
         State.activeRoomId = null;
         this.onboardingUserId = null;
+        Chatbot.setAccount(null);
         this.renderCurrentApplicationState();
       } else if (newHash === 'onboarding') {
         State.user = null;
         State.rooms = [];
         State.activeRoomId = null;
         this.onboardingUserId = null;
+        Chatbot.setAccount(null);
         this.renderCurrentApplicationState();
       }
     });
@@ -1175,7 +1179,7 @@ const App = {
       container.innerHTML = (Chatbot.messages || []).map(m => `
         <div class="chat-message-row msg-${m.sender}">
           <div class="chat-avatar">
-            ${m.sender === 'bot' ? Utils.icons.sparkles : (State.user ? State.user.name.charAt(0).toUpperCase() : 'U')}
+            ${m.sender === 'bot' ? Utils.icons.sparkles : (State.user?.name?.charAt(0)?.toUpperCase() || 'U')}
           </div>
           <div class="chat-bubble">
             <div class="chat-meta">
@@ -1186,8 +1190,8 @@ const App = {
               ${Views.formatChatMessage(m.text)}
             </div>
             ${m.actionTag ? `
-              <div class="chat-action-badge">
-                <span class="badge-icon">✓</span>
+              <div class="chat-action-badge ${m.actionTag === 'Request failed' ? 'action-failed' : ''}">
+                <span class="badge-icon">${m.actionTag === 'Request failed' ? '!' : '✓'}</span>
                 <span class="badge-tag">${Utils.escapeHtml(m.actionTag)}:</span>
                 <span class="badge-detail">${Utils.escapeHtml(m.actionDetails || '')}</span>
               </div>
@@ -1276,8 +1280,8 @@ const App = {
       <div class="mini-chat-msg mini-msg-${m.sender}">
         <div class="mini-chat-text">${Views.formatChatMessage(m.text)}</div>
         ${m.actionTag ? `
-          <div class="mini-action-tag">
-            ✓ ${Utils.escapeHtml(m.actionTag)}: ${Utils.escapeHtml(m.actionDetails || '')}
+          <div class="mini-action-tag ${m.actionTag === 'Request failed' ? 'action-failed' : ''}">
+            ${m.actionTag === 'Request failed' ? '!' : '✓'} ${Utils.escapeHtml(m.actionTag)}: ${Utils.escapeHtml(m.actionDetails || '')}
           </div>
         ` : ''}
       </div>
@@ -1880,7 +1884,7 @@ const App = {
     if (confirmBtn) {
       confirmBtn.addEventListener('click', async () => {
         await API.logout();
-        Chatbot.clearHistory();
+        Chatbot.setAccount(null);
         State.user = null;
         State.rooms = [];
         State.activeRoomId = null;
