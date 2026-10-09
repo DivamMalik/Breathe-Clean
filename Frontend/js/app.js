@@ -2135,29 +2135,34 @@ const App = {
     if (formSignUp) {
       formSignUp.addEventListener('submit', async (e) => {
         e.preventDefault();
+        const signupError = document.getElementById('signup-error');
+        const showSignupError = (message) => {
+          if (!signupError) return;
+          signupError.textContent = message;
+          signupError.style.display = 'block';
+        };
+        if (signupError) {
+          signupError.textContent = '';
+          signupError.style.display = 'none';
+        }
+
         const name = document.getElementById('signup-name').value;
         const email = document.getElementById('signup-email').value;
         const pw = document.getElementById('signup-password').value;
         const confirmPw = document.getElementById('signup-password-confirm').value;
 
         if (pw !== confirmPw) {
-          Utils.showToast('Passwords do not match', 'warning');
+          showSignupError('Passwords do not match.');
           return;
         }
 
         try {
           const user = await API.signup(name, email, pw);
-          user.isOnboarded = true; // take straight to dashboard as requested
           API.updateUser(user);
           State.user = user;
-          // Direct straight to dashboard with animated data loading
-          State.activeView = 'dashboard';
-          window.location.hash = 'dashboard';
-          this.showDashboardEntranceAnimation = true;
           this.renderCurrentApplicationState();
-          Utils.showToast('Account created successfully', 'success');
         } catch (err) {
-          Utils.showToast(err.message, 'warning');
+          showSignupError(err.message || 'Unable to create your account. Please try again.');
         }
       });
     }

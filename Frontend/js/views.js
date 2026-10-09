@@ -1530,6 +1530,7 @@ const Views = {
                   </div>
                 </div>
 
+                <p id="signup-error" role="alert" aria-live="polite" style="display:none; color:#b91c1c; font-size:13px; margin:0;"></p>
                 <button type="submit" class="btn btn-primary btn-block btn-auth-submit">
                   <span>Create account</span> ${Utils.icons.arrowRight}
                 </button>
