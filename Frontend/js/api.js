@@ -12,6 +12,211 @@ const STORAGE_KEYS = {
 const API_BASE_URL = (window.BREATHE_CLEAN_API_BASE || 'http://localhost:5001/api')
   .replace(/\/+$/, '');
 
+const DEFAULT_ROOMS = [
+  {
+    id: 'room_bedroom',
+    name: 'Bedroom',
+    type: 'Bedroom',
+    image: 'assets/images/room-bedroom.jpg',
+    length: 4.5,
+    width: 3.0,
+    area: 13.5,
+    ceilingHeight: 2.8,
+    windowsCount: 1,
+    doorsCount: 1,
+    typicalOccupants: 2,
+    mode: 'AUTO',
+    environment: {
+      outdoorAQI: 112,
+      indoorAQI: 38,
+      co2: 640,
+      temperature: 24,
+      humidity: 51,
+      occupancy: 2,
+      timestamp: new Date().toISOString()
+    },
+    devices: [
+      {
+        id: 'dev_bed_win',
+        type: 'window',
+        name: 'Smart Windows',
+        state: 'Closed',
+        connectionState: 'Connected',
+        lastUpdated: new Date(Date.now() - 1000 * 60 * 3).toISOString()
+      },
+      {
+        id: 'dev_bed_vent',
+        type: 'ventilation',
+        name: 'Ventilation',
+        state: 'Normal',
+        connectionState: 'Connected',
+        lastUpdated: new Date(Date.now() - 1000 * 60 * 10).toISOString()
+      },
+      {
+        id: 'dev_bed_pur',
+        type: 'purifier',
+        name: 'Air Purifier',
+        state: 'Active',
+        connectionState: 'Connected',
+        lastUpdated: new Date(Date.now() - 1000 * 25).toISOString()
+      }
+    ],
+    activity: [
+      {
+        id: 'act_1',
+        source: 'SYSTEM',
+        action: 'Windows remain closed',
+        detail: 'Outdoor AQI increased to 112.',
+        timestamp: new Date(Date.now() - 1000 * 60 * 3).toISOString()
+      },
+      {
+        id: 'act_2',
+        source: 'SYSTEM',
+        action: 'Purifier turned to normal mode',
+        detail: 'Indoor AQI improved to 38.',
+        timestamp: new Date(Date.now() - 1000 * 60 * 6).toISOString()
+      },
+      {
+        id: 'act_3',
+        source: 'SYSTEM',
+        action: 'Ventilation running at normal rate',
+        detail: 'Maintaining fresh air circulation.',
+        timestamp: new Date(Date.now() - 1000 * 60 * 10).toISOString()
+      },
+      {
+        id: 'act_4',
+        source: 'YOU',
+        action: 'Switched to Auto mode',
+        detail: 'Breathe Clean resumed control.',
+        timestamp: new Date(Date.now() - 1000 * 60 * 13).toISOString()
+      },
+      {
+        id: 'act_5',
+        source: 'SYSTEM',
+        action: 'Indoor CO₂ stable',
+        detail: 'Current level: 640 ppm.',
+        timestamp: new Date(Date.now() - 1000 * 60 * 16).toISOString()
+      }
+    ]
+  },
+  {
+    id: 'room_living',
+    name: 'Living Room',
+    type: 'Living Room',
+    image: 'assets/images/room-livingroom.jpg',
+    length: 6.2,
+    width: 4.1,
+    area: 25.4,
+    ceilingHeight: 3.0,
+    windowsCount: 2,
+    doorsCount: 2,
+    typicalOccupants: 4,
+    mode: 'AUTO',
+    environment: {
+      outdoorAQI: 112,
+      indoorAQI: 46,
+      co2: 720,
+      temperature: 23,
+      humidity: 48,
+      occupancy: 3,
+      timestamp: new Date().toISOString()
+    },
+    devices: [
+      {
+        id: 'dev_liv_win',
+        type: 'window',
+        name: 'Smart Windows',
+        state: 'Closed',
+        connectionState: 'Connected',
+        lastUpdated: new Date(Date.now() - 1000 * 60 * 15).toISOString()
+      },
+      {
+        id: 'dev_liv_vent',
+        type: 'ventilation',
+        name: 'Ventilation',
+        state: 'Normal',
+        connectionState: 'Connected',
+        lastUpdated: new Date(Date.now() - 1000 * 60 * 15).toISOString()
+      },
+      {
+        id: 'dev_liv_pur',
+        type: 'purifier',
+        name: 'Air Purifier',
+        state: 'Active',
+        connectionState: 'Connected',
+        lastUpdated: new Date(Date.now() - 1000 * 60 * 5).toISOString()
+      }
+    ],
+    activity: [
+      {
+        id: 'act_liv_1',
+        source: 'SYSTEM',
+        action: 'Ventilation balanced',
+        detail: 'Living room occupancy at 3 persons.',
+        timestamp: new Date(Date.now() - 1000 * 60 * 20).toISOString()
+      }
+    ]
+  },
+  {
+    id: 'room_study',
+    name: 'Study',
+    type: 'Study',
+    image: 'assets/images/room-study.jpg',
+    length: 3.5,
+    width: 2.8,
+    area: 9.8,
+    ceilingHeight: 2.7,
+    windowsCount: 1,
+    doorsCount: 1,
+    typicalOccupants: 1,
+    mode: 'AUTO',
+    environment: {
+      outdoorAQI: 112,
+      indoorAQI: 32,
+      co2: 590,
+      temperature: 22,
+      humidity: 50,
+      occupancy: 1,
+      timestamp: new Date().toISOString()
+    },
+    devices: [
+      {
+        id: 'dev_stu_win',
+        type: 'window',
+        name: 'Smart Windows',
+        state: 'Closed',
+        connectionState: 'Connected',
+        lastUpdated: new Date(Date.now() - 1000 * 60 * 30).toISOString()
+      },
+      {
+        id: 'dev_stu_vent',
+        type: 'ventilation',
+        name: 'Ventilation',
+        state: 'Low',
+        connectionState: 'Connected',
+        lastUpdated: new Date(Date.now() - 1000 * 60 * 30).toISOString()
+      },
+      {
+        id: 'dev_stu_pur',
+        type: 'purifier',
+        name: 'Air Purifier',
+        state: 'Standby',
+        connectionState: 'Connected',
+        lastUpdated: new Date(Date.now() - 1000 * 60 * 30).toISOString()
+      }
+    ],
+    activity: [
+      {
+        id: 'act_stu_1',
+        source: 'SYSTEM',
+        action: 'Study space active',
+        detail: 'Low noise ventilation enabled.',
+        timestamp: new Date(Date.now() - 1000 * 60 * 30).toISOString()
+      }
+    ]
+  }
+];
+
 const API = {
   _userId() {
     const raw = localStorage.getItem(STORAGE_KEYS.USER) || sessionStorage.getItem(STORAGE_KEYS.USER);
@@ -536,13 +741,21 @@ const API = {
   },
 
   // Rooms Endpoints
+  getDefaultRooms() {
+    return JSON.parse(JSON.stringify(DEFAULT_ROOMS));
+  },
+
   getRooms() {
     const raw = this._getScopedItem(STORAGE_KEYS.ROOMS);
-    if (!raw) return [];
+    if (!raw) {
+      return this._userId() ? [] : this.getDefaultRooms();
+    }
     try {
-      return JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      return this._userId() ? [] : this.getDefaultRooms();
     } catch {
-      return [];
+      return this._userId() ? [] : this.getDefaultRooms();
     }
   },
 
