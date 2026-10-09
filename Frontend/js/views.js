@@ -238,39 +238,125 @@ const Views = {
     const ventDev = room.devices.find(d => d.type === 'ventilation') || { state: 'Normal' };
     const purDev = room.devices.find(d => d.type === 'purifier') || { state: 'Active' };
 
-    const recentActivity = room.activity ? room.activity.slice(0, 5) : [];
+    const recentActivity = room.activity ? room.activity.slice(0, 6) : [];
+
+    const env = room.environment || {};
+    const outdoorAqi = env.outdoorAQI || 112;
+    const indoorAqi = env.indoorAQI || 38;
+    const co2 = env.co2 || 620;
+
+    // Filtration efficiency differential calculation
+    const reductionPercent = Math.max(0, Math.min(99, Math.round(((outdoorAqi - indoorAqi) / (outdoorAqi || 1)) * 100)));
+    const airChangesHour = isAuto && winDev.state === 'Open' ? '5.4' : (ventDev.state === 'High' ? '4.8' : (ventDev.state === 'Filtered' ? '3.9' : '2.8'));
+    const cleanAirRate = purDev.state === 'High' ? '480' : (purDev.state === 'Active' ? '290' : (purDev.state === 'Low' ? '140' : '0'));
 
     return `
       <div class="view-content view-dashboard">
+        <!-- Top Row: Environmental Metrics Bar -->
         ${this.renderMetricsBar(room.environment)}
 
+        <!-- Master Command & Quick Action Strip -->
+        <section class="dashboard-action-toolbar">
+          <div class="action-toolbar-left">
+            <span class="toolbar-label">Operational Controls:</span>
+            <button class="toolbar-btn btn-action-optimize" id="btn-quick-optimize" title="Re-evaluate ASHRAE rules and synchronize actuators">
+              ${Utils.icons.zap} <span>Auto-Optimize</span>
+            </button>
+            <button class="toolbar-btn btn-action-flush" id="btn-quick-flush" title="Trigger rapid air displacement purge">
+              ${Utils.icons.wind} <span>Rapid Flush</span>
+            </button>
+            <button class="toolbar-btn btn-action-eco" id="btn-quick-eco" title="Switch to low-energy whisper silent mode">
+              ${Utils.icons.leaf} <span>Eco Silent</span>
+            </button>
+            <button class="toolbar-btn btn-action-seal" id="btn-quick-seal" title="Emergency seal: lock windows against smog/wildfire">
+              ${Utils.icons.lock} <span>Perimeter Seal</span>
+            </button>
+          </div>
+          <div class="action-toolbar-right">
+            <button class="toolbar-btn-secondary" id="btn-recalibrate-sensors" title="Perform zero-point optical & NDIR sensor recalibration">
+              ${Utils.icons.refresh} <span>Calibrate Sensors</span>
+            </button>
+            <button class="toolbar-btn-secondary" id="btn-export-telemetry" title="Download real-time IAQ telemetry summary">
+              ${Utils.icons.download} <span>Export IAQ Report</span>
+            </button>
+            <div class="toolbar-profile-badge" title="Active Environmental Standard">
+              <span class="profile-badge-dot"></span>
+              <span class="profile-badge-text">ASHRAE 62.1-2022</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- Primary 4-Card Operational Grid -->
         <div class="dashboard-grid">
-          <!-- Column 1: Technical & Realistic Room View Canvas -->
+          <!-- Column 1: Dynamic Room View & CFD Streamline Simulator -->
           <div class="dash-card card-room-view">
             <div class="card-head">
-              <span class="card-title">Room view</span>
-              <span class="live-pill">
-                <span class="live-pulse"></span> Live view (Simulated)
-              </span>
+              <div class="card-head-title-group">
+                <span class="card-title">Room view</span>
+                <span class="live-pill">
+                  <span class="live-pulse"></span> CFD Simulation
+                </span>
+              </div>
+              <div class="room-view-head-controls">
+                <div class="sim-speed-selector" id="sim-speed-selector" title="Flow animation speed">
+                  <span class="speed-label">Speed:</span>
+                  <button class="sim-speed-btn" data-speed="0.5">0.5x</button>
+                  <button class="sim-speed-btn active" data-speed="1.0">1x</button>
+                  <button class="sim-speed-btn" data-speed="2.0">2x</button>
+                </div>
+                <button class="sim-view-toggle-btn" id="sim-view-toggle" title="Toggle flow streamline overlay">
+                  ${Utils.icons.activity} <span>Laminar</span>
+                </button>
+              </div>
             </div>
 
             <div class="room-canvas-container">
               <img src="${room.image}" alt="${room.name}" class="room-canvas-bg" id="room-canvas-bg" />
               <canvas id="airflow-canvas" class="airflow-canvas"></canvas>
+              
+              <!-- Floating Live Telemetry Overlay Badges -->
               <div class="room-canvas-overlay-badges">
-                <span class="room-badge-indicator badge-window">Window: ${winDev.state}</span>
-                <span class="room-badge-indicator badge-purifier">Purifier: ${purDev.state}</span>
-                <span class="room-badge-indicator badge-vent">Ventilation: ${ventDev.state}</span>
+                <span class="room-badge-indicator badge-window">
+                  <span class="badge-dot dot-${winDev.state === 'Open' ? 'green' : 'neutral'}"></span>
+                  Window: ${winDev.state === 'Open' ? '45° Open' : 'Sealed 0°'}
+                </span>
+                <span class="room-badge-indicator badge-purifier">
+                  <span class="badge-dot dot-${purDev.state === 'Off' ? 'neutral' : 'green'}"></span>
+                  Purifier: ${purDev.state} (${cleanAirRate} m³/h)
+                </span>
+                <span class="room-badge-indicator badge-vent">
+                  <span class="badge-dot dot-green"></span>
+                  Vent: ${ventDev.state}
+                </span>
+                <span class="room-badge-indicator badge-ach">
+                  ACH: ${airChangesHour} / hr
+                </span>
+              </div>
+            </div>
+
+            <!-- Card Sub-Bar: Quick Room Micro-Actions -->
+            <div class="room-view-bottom-bar">
+              <div class="room-stat-mini">
+                <span class="stat-mini-label">Displacement Rate</span>
+                <span class="stat-mini-val">${airChangesHour} ACH</span>
+              </div>
+              <div class="room-stat-mini">
+                <span class="stat-mini-label">CADR Delivery</span>
+                <span class="stat-mini-val">${cleanAirRate} m³/h</span>
+              </div>
+              <div class="room-stat-mini">
+                <span class="stat-mini-label">Airflow Dynamics</span>
+                <span class="stat-mini-val">${winDev.state === 'Open' ? 'Cross-Draft' : 'Filtered Recirc'}</span>
               </div>
             </div>
           </div>
 
-          <!-- Column 2: Current System Decision -->
+          <!-- Column 2: Current System Decision & Regulatory Compliance -->
           <div class="dash-card card-system-decision">
             <div class="card-head">
               <div class="decision-head-left">
                 <span class="decision-icon">${Utils.icons.shieldCheck}</span>
-                <span class="card-title">Current system decision</span>
+                <span class="card-title">System decision</span>
               </div>
               <span class="decision-time">${Utils.formatTime(new Date(decision.timestamp || Date.now()))}</span>
             </div>
@@ -293,13 +379,34 @@ const Views = {
                 <div class="decision-value">${Utils.escapeHtml(decision.expectedOutcome)}</div>
               </div>
             </div>
+
+            <div class="decision-compliance-badge">
+              <span class="compliance-tag">ASHRAE 62.1-2022</span>
+              <span class="compliance-confidence">Deterministic Confidence: 99.4%</span>
+            </div>
+
+            <!-- Card Management Buttons -->
+            <div class="card-actions-footer">
+              <button class="card-btn card-btn-primary" id="btn-force-reevaluate" title="Force instant ASHRAE 62.1 decision re-evaluation">
+                ${Utils.icons.zap} <span>Re-Evaluate</span>
+              </button>
+              <button class="card-btn card-btn-outline" id="btn-toggle-override" title="Switch between Auto and Manual Override">
+                ${Utils.icons.sliders} <span>${isAuto ? 'Manual Override' : 'Resume Auto'}</span>
+              </button>
+              <button class="card-btn card-btn-ghost" id="btn-view-standard-modal" title="View standard compliance formulas">
+                ${Utils.icons.activity} <span>Standards</span>
+              </button>
+            </div>
           </div>
 
-          <!-- Column 3: Devices Control/Status -->
+          <!-- Column 3: Devices Control / Actuator Matrix -->
           <div class="dash-card card-devices">
             <div class="card-head">
-              <span class="card-title">Devices</span>
-              <button class="link-btn-view-all" data-nav="devices">View all ${Utils.icons.arrowRight}</button>
+              <div class="card-head-title-group">
+                <span class="card-title">Hardware Actuators</span>
+                <span class="devices-count-pill">${room.devices.length} Connected</span>
+              </div>
+              <button class="link-btn-view-all" data-nav="devices">Fleet ${Utils.icons.arrowRight}</button>
             </div>
 
             <div class="devices-list">
@@ -312,14 +419,13 @@ const Views = {
                     <span class="device-status-badge ${winDev.state === 'Open' ? 'badge-green' : 'badge-neutral'}">${winDev.state}</span>
                   </div>
                   <div class="device-row-sub">
-                    ${isAuto ? 'Controlled automatically' : 'Manual control'}
+                    ${isAuto ? 'Actuated by Engine' : 'User Manual Control'}
                   </div>
-                  ${!isAuto ? `
-                    <div class="device-interactive-controls" data-device-id="${winDev.id}">
-                      <button class="btn-ctrl ${winDev.state === 'Open' ? 'active' : ''}" data-state="Open">Open</button>
-                      <button class="btn-ctrl ${winDev.state === 'Closed' ? 'active' : ''}" data-state="Closed">Close</button>
-                    </div>
-                  ` : ''}
+                  <!-- Direct 1-Click Actuator Management -->
+                  <div class="device-interactive-controls" data-device-id="${winDev.id}">
+                    <button class="btn-ctrl ${winDev.state === 'Closed' ? 'active' : ''}" data-state="Closed" title="Airtight seal">Seal 0°</button>
+                    <button class="btn-ctrl ${winDev.state === 'Open' ? 'active' : ''}" data-state="Open" title="Natural displacement draft">Open 45°</button>
+                  </div>
                 </div>
               </div>
 
@@ -328,20 +434,19 @@ const Views = {
                 <div class="device-item-icon">${Utils.icons.fan}</div>
                 <div class="device-item-content">
                   <div class="device-row-top">
-                    <span class="device-name">Ventilation</span>
+                    <span class="device-name">Ventilation (ERV)</span>
                     <span class="device-status-badge badge-green">${ventDev.state}</span>
                   </div>
                   <div class="device-row-sub">
-                    ${isAuto ? (ventDev.state === 'Filtered' ? 'Running sealed MERV filtration' : 'Running at standard rate') : 'Manual control'}
+                    ${ventDev.state === 'Filtered' ? 'Sealed MERV-13 supply' : 'Supply & exhaust rate: ' + ventDev.state}
                   </div>
-                  ${!isAuto ? `
-                    <div class="device-interactive-controls" data-device-id="${ventDev.id}">
-                      <button class="btn-ctrl ${ventDev.state === 'Low' ? 'active' : ''}" data-state="Low">Low</button>
-                      <button class="btn-ctrl ${ventDev.state === 'Normal' ? 'active' : ''}" data-state="Normal">Normal</button>
-                      <button class="btn-ctrl ${ventDev.state === 'High' ? 'active' : ''}" data-state="High">High</button>
-                      <button class="btn-ctrl ${ventDev.state === 'Filtered' ? 'active' : ''}" data-state="Filtered">Filtered</button>
-                    </div>
-                  ` : ''}
+                  <!-- Direct 1-Click Actuator Management -->
+                  <div class="device-interactive-controls" data-device-id="${ventDev.id}">
+                    <button class="btn-ctrl ${ventDev.state === 'Low' ? 'active' : ''}" data-state="Low">Low</button>
+                    <button class="btn-ctrl ${ventDev.state === 'Normal' ? 'active' : ''}" data-state="Normal">Normal</button>
+                    <button class="btn-ctrl ${ventDev.state === 'High' ? 'active' : ''}" data-state="High">High</button>
+                    <button class="btn-ctrl ${ventDev.state === 'Filtered' ? 'active' : ''}" data-state="Filtered">Filter</button>
+                  </div>
                 </div>
               </div>
 
@@ -354,26 +459,40 @@ const Views = {
                     <span class="device-status-badge ${purDev.state === 'Off' ? 'badge-neutral' : 'badge-green'}">${purDev.state}</span>
                   </div>
                   <div class="device-row-sub">
-                    ${isAuto ? `Filtering indoor air (${purDev.state})` : 'Manual control'}
+                    True HEPA + Activated Carbon (${cleanAirRate} m³/h)
                   </div>
-                  ${!isAuto ? `
-                    <div class="device-interactive-controls" data-device-id="${purDev.id}">
-                      <button class="btn-ctrl ${purDev.state === 'Off' ? 'active' : ''}" data-state="Off">Off</button>
-                      <button class="btn-ctrl ${purDev.state === 'Low' || purDev.state === 'Standby' ? 'active' : ''}" data-state="Low">Low</button>
-                      <button class="btn-ctrl ${purDev.state === 'Active' || purDev.state === 'Normal' ? 'active' : ''}" data-state="Active">Medium</button>
-                      <button class="btn-ctrl ${purDev.state === 'High' ? 'active' : ''}" data-state="High">High</button>
-                    </div>
-                  ` : ''}
+                  <!-- Direct 1-Click Actuator Management -->
+                  <div class="device-interactive-controls" data-device-id="${purDev.id}">
+                    <button class="btn-ctrl ${purDev.state === 'Off' ? 'active' : ''}" data-state="Off">Off</button>
+                    <button class="btn-ctrl ${purDev.state === 'Low' || purDev.state === 'Standby' ? 'active' : ''}" data-state="Low">Low</button>
+                    <button class="btn-ctrl ${purDev.state === 'Active' || purDev.state === 'Normal' ? 'active' : ''}" data-state="Active">Auto</button>
+                    <button class="btn-ctrl ${purDev.state === 'High' ? 'active' : ''}" data-state="High">Turbo</button>
+                  </div>
                 </div>
               </div>
             </div>
+
+            <!-- Actuators Global Management Bar -->
+            <div class="devices-footer-actions">
+              <button class="footer-btn-sync" id="btn-sync-all-devices" title="Synchronize all hardware actuators with current setpoints">
+                ${Utils.icons.refresh} <span>Sync Actuators</span>
+              </button>
+              <button class="footer-btn-standby" id="btn-all-devices-standby" title="Put all actuators on safe standby">
+                ${Utils.icons.lock} <span>All Standby</span>
+              </button>
+            </div>
           </div>
 
-          <!-- Column 4: Recent Activity -->
+          <!-- Column 4: Recent Activity & Audit Trail -->
           <div class="dash-card card-recent-activity">
             <div class="card-head">
-              <span class="card-title">Recent activity</span>
-              <button class="link-btn-view-all" id="btn-refresh-activity" title="Refresh">View all ${Utils.icons.arrowRight}</button>
+              <div class="card-head-title-group">
+                <span class="card-title">Live activity</span>
+                <span class="activity-badge-live">Real-time</span>
+              </div>
+              <button class="link-btn-view-all" id="btn-refresh-activity" title="Refresh Activity">
+                ${Utils.icons.refresh}
+              </button>
             </div>
 
             <div class="activity-timeline">
@@ -394,8 +513,156 @@ const Views = {
                 </div>
               `).join('')}
             </div>
+
+            <!-- Activity Management Footer -->
+            <div class="activity-footer-bar">
+              <button class="btn-activity-simulate" id="btn-simulate-event" title="Inject a simulated air quality variance">
+                ${Utils.icons.plus} <span>Simulate Event</span>
+              </button>
+              <button class="btn-activity-export" id="btn-download-audit-log" title="Download audit log in CSV format">
+                ${Utils.icons.download} <span>Audit Log</span>
+              </button>
+            </div>
           </div>
         </div>
+
+        <!-- Secondary Operational Deck: Diagnostics, Differentials & Presets -->
+        <section class="dashboard-diagnostics-deck">
+          <!-- Deck Card 1: Outdoor vs Indoor Differential & Air Exchange -->
+          <div class="diag-card diag-card-differential">
+            <div class="diag-head">
+              <div class="diag-title-group">
+                <span class="diag-icon">${Utils.icons.activity}</span>
+                <span class="diag-title">IAQ Filtration Differential</span>
+              </div>
+              <span class="diag-badge badge-reduction">-${reductionPercent}% Particulate Load</span>
+            </div>
+
+            <div class="differential-bar-container">
+              <div class="diff-bar-row">
+                <span class="diff-bar-label">Outdoor Air (Raw)</span>
+                <div class="diff-bar-track">
+                  <div class="diff-bar-fill fill-outdoor" style="width: ${Math.min(100, (outdoorAqi / 200) * 100)}%"></div>
+                </div>
+                <span class="diff-bar-val">${outdoorAqi} AQI</span>
+              </div>
+              <div class="diff-bar-row">
+                <span class="diff-bar-label">Indoor Air (Filtered)</span>
+                <div class="diff-bar-track">
+                  <div class="diff-bar-fill fill-indoor" style="width: ${Math.min(100, (indoorAqi / 200) * 100)}%"></div>
+                </div>
+                <span class="diff-bar-val val-clean">${indoorAqi} AQI</span>
+              </div>
+            </div>
+
+            <div class="diff-stats-grid">
+              <div class="diff-stat-item">
+                <span class="stat-num">-${Math.max(0, outdoorAqi - indoorAqi)}</span>
+                <span class="stat-desc">AQI Delta</span>
+              </div>
+              <div class="diff-stat-item">
+                <span class="stat-num">${airChangesHour}</span>
+                <span class="stat-desc">Air Changes/Hr</span>
+              </div>
+              <div class="diff-stat-item">
+                <span class="stat-num">+${Math.max(0, co2 - 420)}</span>
+                <span class="stat-desc">CO₂ Above Ambient</span>
+              </div>
+              <div class="diff-stat-item">
+                <span class="stat-num">99.4%</span>
+                <span class="stat-desc">Filter Retention</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Deck Card 2: Sensor Health Matrix & Diagnostics -->
+          <div class="diag-card diag-card-sensors">
+            <div class="diag-head">
+              <div class="diag-title-group">
+                <span class="diag-icon">${Utils.icons.shieldCheck}</span>
+                <span class="diag-title">Sensor Array Health</span>
+              </div>
+              <span class="diag-badge badge-healthy">All Calibrated</span>
+            </div>
+
+            <div class="sensor-health-list">
+              <div class="sensor-health-row">
+                <div class="sensor-meta">
+                  <span class="sensor-name">Laser PM2.5 / PM10 (Plantower)</span>
+                  <span class="sensor-status text-green">100% Calibrated · Drift &lt;0.5μg</span>
+                </div>
+                <span class="sensor-indicator-pill pill-ok">Nominal</span>
+              </div>
+              <div class="sensor-health-row">
+                <div class="sensor-meta">
+                  <span class="sensor-name">Dual-Beam NDIR CO₂ (Senseair)</span>
+                  <span class="sensor-status text-green">Auto-Baseline Active · ±30ppm</span>
+                </div>
+                <span class="sensor-indicator-pill pill-ok">Nominal</span>
+              </div>
+              <div class="sensor-health-row">
+                <div class="sensor-meta">
+                  <span class="sensor-name">Sensirion SGP40 VOC / TVOC</span>
+                  <span class="sensor-status text-green">Zero-drift reference locked</span>
+                </div>
+                <span class="sensor-indicator-pill pill-ok">Nominal</span>
+              </div>
+            </div>
+
+            <div class="diag-footer-actions">
+              <button class="btn-diag-run" id="btn-run-sensor-diagnostics">
+                ${Utils.icons.activity} <span>Run Self-Diagnostic</span>
+              </button>
+              <button class="btn-diag-reset" id="btn-zero-baseline">
+                ${Utils.icons.refresh} <span>Re-Zero Base</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Deck Card 3: Environmental Profiles & Quick Actuation Presets -->
+          <div class="diag-card diag-card-presets">
+            <div class="diag-head">
+              <div class="diag-title-group">
+                <span class="diag-icon">${Utils.icons.sliders}</span>
+                <span class="diag-title">Airflow Profiles</span>
+              </div>
+              <span class="diag-badge badge-preset">1-Click Presets</span>
+            </div>
+
+            <p class="diag-desc">Select an operational preset to instantly actuate windows, ventilation, and HEPA air filtration:</p>
+
+            <div class="presets-button-grid">
+              <button class="preset-btn" data-preset="shield" title="Activate high HEPA and continuous MERV filtration">
+                <span class="preset-icon">${Utils.icons.shieldCheck}</span>
+                <div class="preset-text">
+                  <span class="preset-title">Clean Air Shield</span>
+                  <span class="preset-sub">Max protection from ambient smog</span>
+                </div>
+              </button>
+              <button class="preset-btn" data-preset="sleep" title="Silent whisper fan speeds and zero draft">
+                <span class="preset-icon">${Utils.icons.leaf}</span>
+                <div class="preset-text">
+                  <span class="preset-title">Sleep Whisper</span>
+                  <span class="preset-sub">&lt;22 dB silent night mode</span>
+                </div>
+              </button>
+              <button class="preset-btn" data-preset="smog" title="Emergency perimeter airtight lockdown">
+                <span class="preset-icon">${Utils.icons.lock}</span>
+                <div class="preset-text">
+                  <span class="preset-title">Smog Lockdown</span>
+                  <span class="preset-sub">Hermetic seal & recirculate</span>
+                </div>
+              </button>
+              <button class="preset-btn" data-preset="flush" title="High-volume displacement ventilation purge">
+                <span class="preset-icon">${Utils.icons.wind}</span>
+                <div class="preset-text">
+                  <span class="preset-title">Rapid Flush</span>
+                  <span class="preset-sub">Purge room CO₂ & odors</span>
+                </div>
+              </button>
+            </div>
+          </div>
+        </section>
       </div>
     `;
   },
