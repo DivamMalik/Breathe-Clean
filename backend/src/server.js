@@ -9,13 +9,19 @@ const simulationRoutes = require("./routes/simulationRoutes");
 const { allowedValues } = require("./data/deviceState");
 const { thresholds } = require("./services/environmentRules");
 const { restorePersistedState } = require("./data/restorePersistedState");
+const authRoutes = require("./routes/authRoutes");
+const { createSessionMiddleware } = require("./auth/sessionMiddleware");
 
 restorePersistedState();
 
 const app = express();
 
-app.use(cors());
+const configuredCorsOrigin = process.env.CORS_ORIGIN;
+app.use(cors(configuredCorsOrigin
+  ? { origin: configuredCorsOrigin, credentials: true }
+  : undefined));
 app.use(express.json());
+app.use(createSessionMiddleware());
 
 app.get("/api/health", (_request, response) => {
   response.json({
@@ -30,6 +36,7 @@ app.use("/api/sensors", sensorRoutes);
 app.use("/api/devices", deviceRoutes);
 app.use("/api/decision", decisionRoutes);
 app.use("/api/simulation", simulationRoutes);
+app.use("/api/auth", authRoutes);
 
 app.use((_request, response) => {
   response.status(404).json({ success: false, error: "Route not found" });

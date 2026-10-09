@@ -9,10 +9,13 @@ const { createServer } = require("node:http");
 
 const testDatabaseDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "breathe-clean-test-"));
 process.env.BREATHE_CLEAN_DB_PATH = path.join(testDatabaseDirectory, "nested", "test.sqlite");
+process.env.SESSION_SECRET = "test-session-secret-with-more-than-32-bytes";
+process.env.NODE_ENV = "test";
 
 const {
   database,
   databasePath,
+  getUserByEmail,
   saveAppliedDecision,
   saveSensorReading
 } = require("../src/data/database");
@@ -30,6 +33,9 @@ const {
 const decisionRoutes = require("../src/routes/decisionRoutes");
 const deviceRoutes = require("../src/routes/deviceRoutes");
 const simulationRoutes = require("../src/routes/simulationRoutes");
+const authRoutes = require("../src/routes/authRoutes");
+const { createSessionMiddleware } = require("../src/auth/sessionMiddleware");
+const { requireAuthenticatedUser } = require("../src/auth/authMiddleware");
 const { generateDecision } = require("../src/services/decisionEngine");
 const { thresholds } = require("../src/services/environmentRules");
 const { validateDecision } = require("../src/services/safetyValidator");
@@ -56,6 +62,8 @@ function clearDatabase() {
     DELETE FROM applied_device_states;
     DELETE FROM decision_history;
     DELETE FROM sensor_readings;
+    DELETE FROM user_sessions;
+    DELETE FROM users;
   `);
 }
 
@@ -129,6 +137,11 @@ beforeEach(async () => {
   restoreState();
   const app = express();
   app.use(express.json());
+  app.use(createSessionMiddleware());
+  app.use("/api/auth", authRoutes);
+  app.get("/api/test/private", requireAuthenticatedUser, (request, response) => {
+    response.json({ success: true, user: request.user });
+  });
   app.use("/api/decision", decisionRoutes);
   app.use("/api/devices", deviceRoutes);
   app.use("/api/simulation", simulationRoutes);
@@ -163,15 +176,148 @@ test("database is initialized at the configured path with all persistence tables
   const tables = database.prepare(`
     SELECT name FROM sqlite_master
     WHERE type = 'table' AND name IN (
-      'sensor_readings', 'applied_device_states', 'decision_history'
+      'sensor_readings', 'applied_device_states', 'decision_history',
+      'users', 'user_sessions'
     )
     ORDER BY name
   `).all().map((row) => row.name);
   assert.deepEqual(tables, [
     "applied_device_states",
     "decision_history",
-    "sensor_readings"
+    "sensor_readings",
+    "user_sessions",
+    "users"
   ]);
+});
+
+test("registration stores a normalized email and password hash, not the password", async () => {
+  const password = "correct horse battery staple";
+  const response = await requestJson("/auth/register", {
+    method: "POST",
+    body: { email: "  Person@Example.COM ", password }
+  });
+
+  assert.equal(response.status, 201);
+  assert.deepEqual(response.body, {
+    success: true,
+    user: { id: 1, email: "person@example.com" }
+  });
+  assert.equal(JSON.stringify(response.body).includes(password), false);
+  const savedUser = getUserByEmail("person@example.com");
+  assert.equal(savedUser.email, "person@example.com");
+  assert.notEqual(savedUser.password_hash, password);
+  assert.match(savedUser.password_hash, /^\$2[aby]\$/);
+  assert.ok(savedUser.createdAt);
+});
+
+test("registration rejects duplicate emails after normalization", async () => {
+  await requestJson("/auth/register", {
+    method: "POST",
+    body: { email: "person@example.com", password: "correct horse battery staple" }
+  });
+  const response = await requestJson("/auth/register", {
+    method: "POST",
+    body: { email: " PERSON@EXAMPLE.COM ", password: "another secure password" }
+  });
+
+  assert.equal(response.status, 409);
+  assert.deepEqual(response.body, {
+    success: false,
+    error: "An account with this email already exists"
+  });
+});
+
+test("registration rejects invalid credentials and unexpected fields", async () => {
+  const invalidBodies = [
+    null,
+    { email: "invalid", password: "correct horse battery staple" },
+    { email: "person@example.com" },
+    { email: "person@example.com", password: "short" },
+    { email: "person@example.com", password: `${"a".repeat(71)}é` },
+    { email: "person@example.com", password: "correct horse battery staple", role: "admin" }
+  ];
+
+  for (const body of invalidBodies) {
+    const response = await requestJson("/auth/register", {
+      method: "POST",
+      body
+    });
+    assert.equal(response.status, 400);
+    assert.equal(response.body.success, false);
+  }
+});
+
+test("login rejects incorrect passwords and authenticates valid credentials", async () => {
+  const registration = await requestJson("/auth/register", {
+    method: "POST",
+    body: { email: "person@example.com", password: "correct horse battery staple" }
+  });
+  assert.equal(registration.status, 201);
+
+  const incorrect = await requestJson("/auth/login", {
+    method: "POST",
+    body: { email: "person@example.com", password: "wrong password value" }
+  });
+  assert.equal(incorrect.status, 401);
+  assert.deepEqual(incorrect.body, {
+    success: false,
+    error: "Invalid email or password"
+  });
+
+  const correct = await requestJson("/auth/login", {
+    method: "POST",
+    body: { email: " PERSON@EXAMPLE.COM ", password: "correct horse battery staple" }
+  });
+  assert.equal(correct.status, 200);
+  assert.deepEqual(correct.body, {
+    success: true,
+    user: {
+      id: registration.body.user.id,
+      email: "person@example.com"
+    }
+  });
+  assert.equal(JSON.stringify(correct.body).includes("password_hash"), false);
+});
+
+test("login sets HttpOnly SameSite cookie and persists authenticated session", async () => {
+  const registration = await requestJson("/auth/register", {
+    method: "POST",
+    body: { email: "person@example.com", password: "correct horse battery staple" }
+  });
+  assert.equal(registration.status, 201);
+
+  const unauthenticated = await requestJson("/test/private");
+  assert.equal(unauthenticated.status, 401);
+
+  const loginResponse = await fetch(`${baseUrl}/auth/login`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      email: "person@example.com",
+      password: "correct horse battery staple"
+    })
+  });
+  assert.equal(loginResponse.status, 200);
+  const setCookie = loginResponse.headers.get("set-cookie");
+  assert.ok(setCookie);
+  assert.match(setCookie, /HttpOnly/i);
+  assert.match(setCookie, /SameSite=Lax/i);
+  const cookie = setCookie.split(";", 1)[0];
+
+  const authenticated = await fetch(`${baseUrl}/test/private`, {
+    headers: { cookie }
+  });
+  assert.equal(authenticated.status, 200);
+  assert.deepEqual((await authenticated.json()).user, {
+    id: registration.body.user.id,
+    email: "person@example.com",
+    createdAt: getUserByEmail("person@example.com").createdAt
+  });
+
+  const storedSessions = database.prepare(
+    "SELECT COUNT(*) AS count FROM user_sessions"
+  ).get().count;
+  assert.equal(storedSessions, 1);
 });
 
 test("startup restoration reloads latest sensor readings and applied device state", () => {

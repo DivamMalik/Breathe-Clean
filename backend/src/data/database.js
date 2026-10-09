@@ -51,7 +51,54 @@ database.exec(`
     applied_at TEXT NOT NULL,
     FOREIGN KEY (decision_history_id) REFERENCES decision_history(id)
   );
+
+  CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL COLLATE NOCASE UNIQUE,
+    password_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS user_sessions (
+    sid TEXT PRIMARY KEY,
+    session_json TEXT NOT NULL,
+    expires_at INTEGER NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS user_sessions_expires_at_idx
+  ON user_sessions (expires_at);
 `);
+
+const insertUser = database.prepare(`
+  INSERT INTO users (email, password_hash, created_at)
+  VALUES (@email, @password_hash, @created_at)
+`);
+const selectUserByEmail = database.prepare(`
+  SELECT id, email, password_hash, created_at AS createdAt
+  FROM users
+  WHERE email = @email
+`);
+const selectUserById = database.prepare(`
+  SELECT id, email, created_at AS createdAt
+  FROM users
+  WHERE id = @id
+`);
+
+function createUser(email, passwordHash) {
+  return insertUser.run({
+    email,
+    password_hash: passwordHash,
+    created_at: new Date().toISOString()
+  });
+}
+
+function getUserByEmail(email) {
+  return selectUserByEmail.get({ email });
+}
+
+function getPublicUserById(id) {
+  return selectUserById.get({ id });
+}
 
 const insertSensorReading = database.prepare(`
   INSERT INTO sensor_readings (
@@ -159,6 +206,9 @@ function saveAppliedDecision(decision, sensorData) {
 module.exports = {
   database,
   databasePath,
+  createUser,
+  getPublicUserById,
+  getUserByEmail,
   getLatestAppliedDeviceState,
   getLatestSensorReading,
   saveAppliedDecision,
