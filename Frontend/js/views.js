@@ -94,19 +94,19 @@ const Views = {
 
           <!-- System Mode Toggle Pill -->
           <div class="mode-control-container">
-            <span class="mode-control-label">System mode</span>
+            <span class="mode-control-label">Backend policy</span>
             <div class="mode-segmented-pill">
-              <button class="mode-segment-btn ${isAuto ? 'active' : ''}" data-mode="AUTO">AUTO</button>
-              <button class="mode-segment-btn ${!isAuto ? 'active' : ''}" data-mode="MANUAL">MANUAL</button>
+              <button class="mode-segment-btn ${isAuto ? 'active' : ''}" data-mode="AUTO" title="Evaluate and apply the backend safety policy">Apply</button>
+              <button class="mode-segment-btn" data-mode="MANUAL" disabled title="Persistent AUTO/MANUAL mode is not supported by the backend">Manual</button>
             </div>
           </div>
 
           <!-- Live Mode Indicator Text -->
-          <div class="mode-status-indicator ${isAuto ? 'status-auto' : 'status-manual'}">
+          <div class="mode-status-indicator status-auto">
             <span class="status-dot"></span>
             <div class="status-texts">
-              <span class="status-primary">${isAuto ? 'Automatic control active' : 'Manual control active'}</span>
-              <span class="status-secondary">${isAuto ? 'Breathe Clean is managing this room.' : 'You are controlling this room.'}</span>
+              <span class="status-primary">Safety-checked policy</span>
+              <span class="status-secondary">Policy is applied on request; mode is not persisted.</span>
             </div>
           </div>
         </div>
@@ -252,6 +252,13 @@ const Views = {
 
     return `
       <div class="view-content view-dashboard">
+        <section class="dashboard-action-toolbar" role="status" aria-live="polite">
+          <span id="dashboard-backend-status-message">${Utils.escapeHtml(State.dashboardApiStatus.message)}</span>
+          <button class="toolbar-btn-secondary" id="btn-refresh-dashboard-data" type="button" style="display:${State.dashboardApiStatus.state === 'error' ? 'inline-flex' : 'none'}">
+            ${Utils.icons.refresh} <span>Retry live data</span>
+          </button>
+        </section>
+
         <!-- Top Row: Environmental Metrics Bar -->
         ${this.renderMetricsBar(room.environment)}
 
@@ -262,10 +269,10 @@ const Views = {
             <button class="toolbar-btn btn-action-optimize" id="btn-quick-optimize" title="Re-evaluate ASHRAE rules and synchronize actuators">
               ${Utils.icons.zap} <span>Auto-Optimize</span>
             </button>
-            <button class="toolbar-btn btn-action-flush" id="btn-quick-flush" title="Trigger rapid air displacement purge">
+            <button class="toolbar-btn btn-action-flush" id="btn-quick-flush" disabled title="Unsupported: backend does not allow a forced ventilation override">
               ${Utils.icons.wind} <span>Rapid Flush</span>
             </button>
-            <button class="toolbar-btn btn-action-eco" id="btn-quick-eco" title="Switch to low-energy whisper silent mode">
+            <button class="toolbar-btn btn-action-eco" id="btn-quick-eco" disabled title="Unsupported: backend has no purifier speed or sleep-mode API">
               ${Utils.icons.leaf} <span>Eco Silent</span>
             </button>
             <button class="toolbar-btn btn-action-seal" id="btn-quick-seal" title="Emergency seal: lock windows against smog/wildfire">
@@ -273,7 +280,7 @@ const Views = {
             </button>
           </div>
           <div class="action-toolbar-right">
-            <button class="toolbar-btn-secondary" id="btn-recalibrate-sensors" title="Perform zero-point optical & NDIR sensor recalibration">
+            <button class="toolbar-btn-secondary" id="btn-recalibrate-sensors" disabled title="Unsupported: backend has no sensor calibration endpoint">
               ${Utils.icons.refresh} <span>Calibrate Sensors</span>
             </button>
             <button class="toolbar-btn-secondary" id="btn-export-telemetry" title="Download real-time IAQ telemetry summary">
@@ -464,9 +471,9 @@ const Views = {
                   <!-- Direct 1-Click Actuator Management -->
                   <div class="device-interactive-controls" data-device-id="${purDev.id}">
                     <button class="btn-ctrl ${purDev.state === 'Off' ? 'active' : ''}" data-state="Off">Off</button>
-                    <button class="btn-ctrl ${purDev.state === 'Low' || purDev.state === 'Standby' ? 'active' : ''}" data-state="Low">Low</button>
+                    <button class="btn-ctrl" data-state="Low" disabled title="Unsupported: backend stores purifier ON/OFF only">Low</button>
                     <button class="btn-ctrl ${purDev.state === 'Active' || purDev.state === 'Normal' ? 'active' : ''}" data-state="Active">Auto</button>
-                    <button class="btn-ctrl ${purDev.state === 'High' ? 'active' : ''}" data-state="High">Turbo</button>
+                    <button class="btn-ctrl" data-state="High" disabled title="Unsupported: backend stores purifier ON/OFF only">Turbo</button>
                   </div>
                 </div>
               </div>
@@ -477,7 +484,7 @@ const Views = {
               <button class="footer-btn-sync" id="btn-sync-all-devices" title="Synchronize all hardware actuators with current setpoints">
                 ${Utils.icons.refresh} <span>Sync Actuators</span>
               </button>
-              <button class="footer-btn-standby" id="btn-all-devices-standby" title="Put all actuators on safe standby">
+              <button class="footer-btn-standby" id="btn-all-devices-standby" disabled title="Unsupported: arbitrary standby states can contradict current sensor safety rules">
                 ${Utils.icons.lock} <span>All Standby</span>
               </button>
             </div>
@@ -597,10 +604,10 @@ const Views = {
             </div>
 
             <div class="diag-footer-actions">
-              <button class="btn-diag-run" id="btn-run-sensor-diagnostics">
+              <button class="btn-diag-run" id="btn-run-sensor-diagnostics" disabled title="Unsupported: backend has no sensor diagnostic endpoint">
                 ${Utils.icons.activity} <span>Run Self-Diagnostic</span>
               </button>
-              <button class="btn-diag-reset" id="btn-zero-baseline">
+              <button class="btn-diag-reset" id="btn-zero-baseline" disabled title="Unsupported: backend has no sensor calibration endpoint">
                 ${Utils.icons.refresh} <span>Re-Zero Base</span>
               </button>
             </div>
@@ -626,7 +633,7 @@ const Views = {
                   <span class="preset-sub">Max protection from ambient smog</span>
                 </div>
               </button>
-              <button class="preset-btn" data-preset="sleep" title="Silent whisper fan speeds and zero draft">
+              <button class="preset-btn" data-preset="sleep" disabled title="Unsupported: backend has no sleep mode or purifier speed endpoint">
                 <span class="preset-icon">${Utils.icons.leaf}</span>
                 <div class="preset-text">
                   <span class="preset-title">Sleep Whisper</span>
@@ -640,7 +647,7 @@ const Views = {
                   <span class="preset-sub">Hermetic seal & recirculate</span>
                 </div>
               </button>
-              <button class="preset-btn" data-preset="flush" title="High-volume displacement ventilation purge">
+              <button class="preset-btn" data-preset="flush" disabled title="Unsupported: backend does not allow a forced ventilation override">
                 <span class="preset-icon">${Utils.icons.wind}</span>
                 <div class="preset-text">
                   <span class="preset-title">Rapid Flush</span>
@@ -848,7 +855,7 @@ const Views = {
           </div>
 
           <div class="modal-footer standards-modal-footer">
-            <button class="btn btn-secondary" id="btn-recalc-standards">
+            <button class="btn btn-secondary" id="btn-recalc-standards" disabled title="Unsupported: the backend does not provide standards telemetry or compliance calculations">
               ${Utils.icons.refresh} <span>Recalculate Telemetry</span>
             </button>
             <button class="btn btn-primary" id="btn-dismiss-standards-modal">
@@ -949,28 +956,27 @@ const Views = {
   renderSimulation(room) {
     const env = room ? room.environment : { outdoorAQI: 112, indoorAQI: 38, co2: 640, temperature: 24, humidity: 51, occupancy: 2 };
     const decision = room ? room.decision || Engine.decide(env, room, room.devices) : null;
-    const isAuto = room ? room.mode === 'AUTO' : true;
 
     return `
       <div class="view-content view-simulation">
         <div class="view-page-header">
           <div>
             <h2 class="page-title">Environment Simulation</h2>
-            <p class="page-subtitle">Adjust environmental conditions to evaluate autonomous decisions and live system response.</p>
+            <p class="page-subtitle">Adjust current backend readings or run a saved scenario. Slider changes are temporary; preset scenarios are recorded.</p>
           </div>
-          <div class="sim-mode-badge ${isAuto ? 'sim-auto' : 'sim-manual'}">
-            System Mode: <strong>${room ? room.mode : 'AUTO'}</strong>
+          <div class="sim-mode-badge sim-auto" title="Backend applies its safety policy when requested; persistent room mode is unavailable">
+            Policy: <strong>Apply on request</strong>
           </div>
         </div>
 
         <!-- Simulation Presets Bar -->
         <div class="sim-presets-bar">
           <span class="presets-label">Preset scenarios:</span>
-          <button class="preset-btn" data-preset="smog">Outdoor Smog (AQI 165)</button>
-          <button class="preset-btn" data-preset="fresh">Fresh Morning (AQI 22)</button>
-          <button class="preset-btn" data-preset="crowded">Crowded Gathering (CO₂ 1,380 ppm)</button>
-          <button class="preset-btn" data-preset="indoor-smoke">Indoor Smoke Spike (AQI 145)</button>
-          <button class="preset-btn" data-preset="optimal">Balanced Clean Air</button>
+          <button class="preset-btn" data-scenario="clean-air">Clean Air</button>
+          <button class="preset-btn" data-scenario="pollution">Outdoor Pollution</button>
+          <button class="preset-btn" data-scenario="high-co2">High CO₂</button>
+          <button class="preset-btn" data-scenario="bad-air">Bad Air</button>
+          <span class="text-muted">Scenarios update shared backend readings and apply a safety-validated decision.</span>
         </div>
 
         <div class="simulation-layout">
@@ -985,7 +991,7 @@ const Views = {
                   <label for="sim-outdoor-aqi">Outdoor AQI</label>
                   <span class="control-value-display" id="val-outdoor-aqi">${env.outdoorAQI}</span>
                 </div>
-                <input type="range" id="sim-outdoor-aqi" min="0" max="400" value="${env.outdoorAQI}" class="slider" />
+                <input type="range" id="sim-outdoor-aqi" min="0" max="${Math.max(400, env.outdoorAQI)}" value="${env.outdoorAQI}" class="slider" />
                 <div class="slider-scale">
                   <span>0 Clean</span>
                   <span>100 Moderate</span>
@@ -1000,7 +1006,7 @@ const Views = {
                   <label for="sim-temperature">Temperature</label>
                   <span class="control-value-display" id="val-temperature">${env.temperature} °C</span>
                 </div>
-                <input type="range" id="sim-temperature" min="10" max="40" value="${env.temperature}" class="slider" />
+                <input type="range" id="sim-temperature" min="${Math.min(10, env.temperature)}" max="${Math.max(40, env.temperature)}" value="${env.temperature}" class="slider" />
                 <div class="slider-scale">
                   <span>10°C Cool</span>
                   <span>24°C Comfort</span>
@@ -1014,7 +1020,7 @@ const Views = {
                   <label for="sim-indoor-aqi">Indoor AQI</label>
                   <span class="control-value-display" id="val-indoor-aqi">${env.indoorAQI}</span>
                 </div>
-                <input type="range" id="sim-indoor-aqi" min="0" max="300" value="${env.indoorAQI}" class="slider" />
+                <input type="range" id="sim-indoor-aqi" min="0" max="${Math.max(300, env.indoorAQI)}" value="${env.indoorAQI}" class="slider" />
                 <div class="slider-scale">
                   <span>0 Pristine</span>
                   <span>50 Good</span>
@@ -1029,7 +1035,7 @@ const Views = {
                   <label for="sim-humidity">Humidity</label>
                   <span class="control-value-display" id="val-humidity">${env.humidity} %</span>
                 </div>
-                <input type="range" id="sim-humidity" min="10" max="95" value="${env.humidity}" class="slider" />
+                <input type="range" id="sim-humidity" min="${Math.min(10, env.humidity)}" max="${Math.max(95, env.humidity)}" value="${env.humidity}" class="slider" />
                 <div class="slider-scale">
                   <span>10% Dry</span>
                   <span>50% Optimal</span>
@@ -1043,7 +1049,7 @@ const Views = {
                   <label for="sim-co2">CO₂ (ppm)</label>
                   <span class="control-value-display" id="val-co2">${env.co2} ppm</span>
                 </div>
-                <input type="range" id="sim-co2" min="350" max="2200" value="${env.co2}" class="slider" />
+                <input type="range" id="sim-co2" min="${Math.min(350, env.co2)}" max="${Math.max(2200, env.co2)}" value="${env.co2}" class="slider" />
                 <div class="slider-scale">
                   <span>400 Ambient</span>
                   <span>800 Normal</span>
@@ -1058,7 +1064,7 @@ const Views = {
                   <label for="sim-occupancy">Occupancy</label>
                   <span class="control-value-display" id="val-occupancy">${env.occupancy}</span>
                 </div>
-                <input type="range" id="sim-occupancy" min="1" max="20" value="${env.occupancy}" class="slider" />
+                <input type="range" id="sim-occupancy" min="0" max="${Math.max(20, env.occupancy)}" value="${env.occupancy}" class="slider" />
                 <div class="slider-scale">
                   <span>1 Person</span>
                   <span>5 Meeting</span>
@@ -1240,7 +1246,7 @@ const Views = {
                       ${Utils.timeAgo(d.lastUpdated || Date.now())}
                     </td>
                     <td>
-                      <button class="btn btn-sm btn-outline btn-device-toggle" data-room-id="${d.roomId}" data-device-id="${d.id}" data-current="${d.state}">
+                      <button class="btn btn-sm btn-outline btn-device-toggle" data-room-id="${d.roomId}" data-device-id="${d.id}" data-current="${d.state}" ${d.roomId !== State.activeRoomId ? 'disabled title="Unsupported: backend device state is global, not per-space"' : ''}>
                         Toggle
                       </button>
                     </td>
@@ -1290,10 +1296,10 @@ const Views = {
           <!-- Default Mode Section -->
           <div class="settings-card">
             <h3 class="settings-card-title">Default Operating Mode</h3>
-            <p class="text-muted mb-3">Operating state selected whenever new spaces are created.</p>
+            <p class="text-muted mb-3">Unavailable: the backend does not support persistent per-space operating modes.</p>
             <div class="segmented-choice" id="settings-default-mode">
-              <button class="choice-btn ${settings.defaultMode === 'AUTO' ? 'active' : ''}" data-val="AUTO">AUTO (Recommended)</button>
-              <button class="choice-btn ${settings.defaultMode === 'MANUAL' ? 'active' : ''}" data-val="MANUAL">MANUAL</button>
+              <button class="choice-btn ${settings.defaultMode === 'AUTO' ? 'active' : ''}" data-val="AUTO" disabled title="Unsupported: no backend room-mode endpoint">AUTO (Recommended)</button>
+              <button class="choice-btn ${settings.defaultMode === 'MANUAL' ? 'active' : ''}" data-val="MANUAL" disabled title="Unsupported: no backend room-mode endpoint">MANUAL</button>
             </div>
           </div>
 
@@ -1417,6 +1423,7 @@ const Views = {
                     <button type="button" class="btn-toggle-pw" aria-label="Toggle password visibility">${Utils.icons.eye}</button>
                   </div>
                 </div>
+                <p id="signin-error" role="alert" aria-live="polite" style="display:none; color:#b91c1c; font-size:13px; margin:0;"></p>
 
                 <div class="form-options-row">
                   <label class="checkbox-label">
@@ -1430,8 +1437,43 @@ const Views = {
                 </button>
               </form>
 
+              <section id="password-recovery-panel" class="auth-form" style="display:none;" aria-live="polite">
+                <div class="auth-form-header">
+                  <h2 class="auth-form-title">Reset your password</h2>
+                  <p class="auth-form-sub">Enter your account email to request a password reset.</p>
+                </div>
+                <p id="password-reset-status" role="status" style="display:none; font-size:13px; margin:0;"></p>
+                <form id="form-request-password-reset" class="auth-form">
+                  <div class="form-field">
+                    <label for="reset-email">Email</label>
+                    <input type="email" id="reset-email" placeholder="you@example.com" required />
+                  </div>
+                  <button type="submit" class="btn btn-primary btn-block btn-auth-submit">
+                    <span>Request reset</span> ${Utils.icons.arrowRight}
+                  </button>
+                </form>
+                <form id="form-confirm-password-reset" class="auth-form" style="display:none;">
+                  <div class="form-field">
+                    <label for="reset-token">Reset token</label>
+                    <input type="text" id="reset-token" autocomplete="one-time-code" required />
+                  </div>
+                  <div class="form-field">
+                    <label for="reset-new-password">New password</label>
+                    <input type="password" id="reset-new-password" autocomplete="new-password" required />
+                  </div>
+                  <div class="form-field">
+                    <label for="reset-confirm-password">Confirm new password</label>
+                    <input type="password" id="reset-confirm-password" autocomplete="new-password" required />
+                  </div>
+                  <button type="submit" class="btn btn-primary btn-block btn-auth-submit">
+                    <span>Set new password</span> ${Utils.icons.arrowRight}
+                  </button>
+                </form>
+                <button type="button" class="link-btn-toggle-auth" id="btn-back-to-signin">Back to sign in</button>
+              </section>
+
               <!-- Secondary Option: Google Sign In -->
-              <div class="auth-divider">
+              <div class="auth-divider" id="signin-auth-divider">
                 <span class="auth-divider-line"></span>
                 <span class="auth-divider-text">or continue with Others</span>
                 <span class="auth-divider-line"></span>

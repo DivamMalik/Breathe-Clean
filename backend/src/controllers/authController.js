@@ -1,11 +1,15 @@
 const bcrypt = require("bcryptjs");
+const crypto = require("node:crypto");
 const {
   createUser,
-  getUserByEmail
+  createPasswordResetToken,
+  getUserByEmail,
+  resetPasswordWithToken
 } = require("../data/database");
 
 const BCRYPT_ROUNDS = 12;
 const MAX_PASSWORD_BYTES = 72;
+const PASSWORD_RESET_TTL_MS = 15 * 60 * 1000;
 
 function normalizeAndValidateCredentials(body) {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
@@ -124,4 +128,109 @@ async function login(request, response) {
   });
 }
 
-module.exports = { login, normalizeAndValidateCredentials, register };
+function requestPasswordReset(request, response) {
+  if (
+    !request.body ||
+    typeof request.body !== "object" ||
+    Array.isArray(request.body) ||
+    Object.keys(request.body).some((field) => field !== "email") ||
+    typeof request.body.email !== "string"
+  ) {
+    return response.status(400).json({
+      success: false,
+      error: "A valid email address is required"
+    });
+  }
+
+  if (
+    process.env.NODE_ENV === "production" ||
+    (
+      process.env.NODE_ENV !== "test" &&
+      process.env.PASSWORD_RESET_DEV_TOKEN !== "true"
+    )
+  ) {
+    return response.status(503).json({
+      success: false,
+      error: "Password reset delivery is not configured"
+    });
+  }
+
+  const email = request.body.email.trim().toLowerCase();
+  if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return response.status(400).json({
+      success: false,
+      error: "A valid email address is required"
+    });
+  }
+
+  const user = getUserByEmail(email);
+  if (!user) {
+    return response.json({
+      success: true,
+      message: "If the account exists, a local development reset token is available."
+    });
+  }
+
+  const resetToken = crypto.randomBytes(32).toString("base64url");
+  const tokenHash = crypto.createHash("sha256").update(resetToken).digest("hex");
+  createPasswordResetToken(
+    user.id,
+    tokenHash,
+    Date.now() + PASSWORD_RESET_TTL_MS
+  );
+
+  return response.json({
+    success: true,
+    message: "Use the development reset token to choose a new password.",
+    resetToken
+  });
+}
+
+async function resetPassword(request, response) {
+  const body = request.body;
+  if (
+    !body ||
+    typeof body !== "object" ||
+    Array.isArray(body) ||
+    Object.keys(body).some((field) => !["token", "password"].includes(field)) ||
+    typeof body.token !== "string" ||
+    !body.token.trim() ||
+    typeof body.password !== "string"
+  ) {
+    return response.status(400).json({
+      success: false,
+      error: "A reset token and valid new password are required"
+    });
+  }
+
+  const passwordBytes = Buffer.byteLength(body.password, "utf8");
+  if (body.password.length < 12 || passwordBytes > MAX_PASSWORD_BYTES) {
+    return response.status(400).json({
+      success: false,
+      error: "Password must be at least 12 characters and no more than 72 bytes"
+    });
+  }
+
+  const tokenHash = crypto.createHash("sha256").update(body.token).digest("hex");
+  const passwordHash = await bcrypt.hash(body.password, BCRYPT_ROUNDS);
+  const reset = resetPasswordWithToken(tokenHash, passwordHash);
+  if (!reset) {
+    return response.status(400).json({
+      success: false,
+      error: "This password reset token is invalid or expired. Request a new one."
+    });
+  }
+
+  return response.json({
+    success: true,
+    message: "Password reset successfully. Sign in with your new password."
+  });
+}
+
+module.exports = {
+  login,
+  normalizeAndValidateCredentials,
+  register,
+  requestPasswordReset,
+  resetPassword
+};

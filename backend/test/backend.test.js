@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const crypto = require("node:crypto");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -30,6 +31,7 @@ const {
   updateSensorData,
   validateCompleteSensorData
 } = require("../src/data/sensorData");
+const sensorRoutes = require("../src/routes/sensorRoutes");
 const decisionRoutes = require("../src/routes/decisionRoutes");
 const deviceRoutes = require("../src/routes/deviceRoutes");
 const simulationRoutes = require("../src/routes/simulationRoutes");
@@ -62,6 +64,7 @@ function clearDatabase() {
     DELETE FROM applied_device_states;
     DELETE FROM decision_history;
     DELETE FROM sensor_readings;
+    DELETE FROM password_reset_tokens;
     DELETE FROM user_sessions;
     DELETE FROM users;
   `);
@@ -142,6 +145,7 @@ beforeEach(async () => {
   app.get("/api/test/private", requireAuthenticatedUser, (request, response) => {
     response.json({ success: true, user: request.user });
   });
+  app.use("/api/sensors", sensorRoutes);
   app.use("/api/decision", decisionRoutes);
   app.use("/api/devices", deviceRoutes);
   app.use("/api/simulation", simulationRoutes);
@@ -177,13 +181,14 @@ test("database is initialized at the configured path with all persistence tables
     SELECT name FROM sqlite_master
     WHERE type = 'table' AND name IN (
       'sensor_readings', 'applied_device_states', 'decision_history',
-      'users', 'user_sessions'
+      'users', 'user_sessions', 'password_reset_tokens'
     )
     ORDER BY name
   `).all().map((row) => row.name);
   assert.deepEqual(tables, [
     "applied_device_states",
     "decision_history",
+    "password_reset_tokens",
     "sensor_readings",
     "user_sessions",
     "users"
@@ -277,6 +282,110 @@ test("login rejects incorrect passwords and authenticates valid credentials", as
     }
   });
   assert.equal(JSON.stringify(correct.body).includes("password_hash"), false);
+});
+
+test("password reset rejects expired tokens", async () => {
+  const email = "reset-expired@example.com";
+  await requestJson("/auth/register", {
+    method: "POST",
+    body: { email, password: "original password 123" }
+  });
+  const request = await requestJson("/auth/password-reset/request", {
+    method: "POST",
+    body: { email }
+  });
+  assert.equal(request.status, 200);
+  assert.ok(request.body.resetToken);
+  const storedToken = database.prepare(
+    "SELECT token_hash, expires_at FROM password_reset_tokens"
+  ).get();
+  assert.equal(
+    storedToken.token_hash,
+    crypto.createHash("sha256").update(request.body.resetToken).digest("hex")
+  );
+  assert.ok(storedToken.expires_at > Date.now());
+
+  database.prepare(
+    "UPDATE password_reset_tokens SET expires_at = ?"
+  ).run(Date.now() - 1);
+  const reset = await requestJson("/auth/password-reset/confirm", {
+    method: "POST",
+    body: { token: request.body.resetToken, password: "replacement password 456" }
+  });
+  assert.equal(reset.status, 400);
+  assert.match(reset.body.error, /invalid or expired/);
+  const oldPasswordLogin = await requestJson("/auth/login", {
+    method: "POST",
+    body: { email, password: "original password 123" }
+  });
+  assert.equal(oldPasswordLogin.status, 200);
+});
+
+test("password reset does not claim email delivery is configured in production", async () => {
+  const previousEnvironment = process.env.NODE_ENV;
+  process.env.NODE_ENV = "production";
+  let response;
+  try {
+    response = await requestJson("/auth/password-reset/request", {
+      method: "POST",
+      body: { email: "person@example.com" }
+    });
+  } finally {
+    process.env.NODE_ENV = previousEnvironment;
+  }
+
+  assert.equal(response.status, 503);
+  assert.deepEqual(response.body, {
+    success: false,
+    error: "Password reset delivery is not configured"
+  });
+});
+
+test("password reset is single-use and new password can log in", async () => {
+  const email = "reset-single-use@example.com";
+  await requestJson("/auth/register", {
+    method: "POST",
+    body: { email, password: "original password 123" }
+  });
+  const request = await requestJson("/auth/password-reset/request", {
+    method: "POST",
+    body: { email }
+  });
+  assert.equal(request.status, 200);
+  assert.ok(request.body.resetToken);
+
+  const weakPassword = await requestJson("/auth/password-reset/confirm", {
+    method: "POST",
+    body: { token: request.body.resetToken, password: "too short" }
+  });
+  assert.equal(weakPassword.status, 400);
+
+  const reset = await requestJson("/auth/password-reset/confirm", {
+    method: "POST",
+    body: { token: request.body.resetToken, password: "replacement password 456" }
+  });
+  assert.equal(reset.status, 200);
+
+  const tokenReuse = await requestJson("/auth/password-reset/confirm", {
+    method: "POST",
+    body: { token: request.body.resetToken, password: "another replacement 789" }
+  });
+  assert.equal(tokenReuse.status, 400);
+
+  const oldPasswordLogin = await requestJson("/auth/login", {
+    method: "POST",
+    body: { email, password: "original password 123" }
+  });
+  assert.equal(oldPasswordLogin.status, 401);
+  const newPasswordLogin = await requestJson("/auth/login", {
+    method: "POST",
+    body: { email, password: "replacement password 456" }
+  });
+  assert.equal(newPasswordLogin.status, 200);
+
+  const user = getUserByEmail(email);
+  assert.notEqual(user.password_hash, "replacement password 456");
+  assert.match(user.password_hash, /^\$2[aby]\$/);
 });
 
 test("login sets HttpOnly SameSite cookie and persists authenticated session", async () => {
@@ -481,6 +590,18 @@ for (const scenario of scenarios) {
       scenario.expected
     );
     assert.equal(validateDecision(response.body.decision, response.body.sensorData).valid, true);
+    const appliedResponse = await requestJson("/decision/apply", {
+      method: "POST",
+      body: response.body.decision
+    });
+    assert.equal(appliedResponse.status, 200);
+    assert.equal(appliedResponse.body.applied, true);
+    assert.deepEqual(
+      Object.fromEntries(
+        Object.keys(scenario.expected).map((field) => [field, appliedResponse.body.deviceState[field]])
+      ),
+      scenario.expected
+    );
     const savedReading = database.prepare(`
       SELECT scenario, outdoor_aqi, indoor_aqi, co2, recorded_at
       FROM sensor_readings ORDER BY id DESC LIMIT 1
@@ -627,6 +748,52 @@ test("unsafe PUT /api/devices is rejected without changing device state", async 
   assert.equal(response.body.success, false);
   assert.match(response.body.error, /Unsafe decision/);
   assert.deepEqual(getDeviceState(), before);
+});
+
+test("PUT /api/sensors followed by decision apply synchronizes validated backend state", async () => {
+  const sensorResponse = await requestJson("/sensors", {
+    method: "PUT",
+    body: { outdoorAQI: 45, indoorAQI: 55, co2: 1600 }
+  });
+  assert.equal(sensorResponse.status, 200);
+  assert.deepEqual(
+    {
+      outdoorAQI: sensorResponse.body.sensorData.outdoorAQI,
+      indoorAQI: sensorResponse.body.sensorData.indoorAQI,
+      co2: sensorResponse.body.sensorData.co2
+    },
+    { outdoorAQI: 45, indoorAQI: 55, co2: 1600 }
+  );
+
+  const decisionResponse = await requestJson("/decision", { method: "GET" });
+  assert.equal(decisionResponse.status, 200);
+  assert.deepEqual(
+    {
+      windows: decisionResponse.body.decision.windows,
+      purifier: decisionResponse.body.decision.purifier,
+      ventilation: decisionResponse.body.decision.ventilation,
+      mode: decisionResponse.body.decision.mode
+    },
+    {
+      windows: "OPEN",
+      purifier: "OFF",
+      ventilation: "HIGH",
+      mode: "VENTILATION"
+    }
+  );
+
+  const applyResponse = await requestJson("/decision/apply", {
+    method: "POST",
+    body: decisionResponse.body.decision
+  });
+  assert.equal(applyResponse.status, 200);
+  assert.equal(applyResponse.body.applied, true);
+  assert.deepEqual(applyResponse.body.deviceState, {
+    windows: "OPEN",
+    purifier: "OFF",
+    ventilation: "HIGH",
+    mode: "VENTILATION"
+  });
 });
 
 test("unsafe POST /api/decision/apply is rejected without changing device state", async () => {

@@ -59,11 +59,22 @@ database.exec(`
     created_at TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    token_hash TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
   CREATE TABLE IF NOT EXISTS user_sessions (
     sid TEXT PRIMARY KEY,
     session_json TEXT NOT NULL,
     expires_at INTEGER NOT NULL
   );
+
+  CREATE INDEX IF NOT EXISTS password_reset_tokens_expires_at_idx
+  ON password_reset_tokens (expires_at);
 
   CREATE INDEX IF NOT EXISTS user_sessions_expires_at_idx
   ON user_sessions (expires_at);
@@ -98,6 +109,65 @@ function getUserByEmail(email) {
 
 function getPublicUserById(id) {
   return selectUserById.get({ id });
+}
+
+const insertPasswordResetToken = database.prepare(`
+  INSERT INTO password_reset_tokens (token_hash, user_id, expires_at, created_at)
+  VALUES (@token_hash, @user_id, @expires_at, @created_at)
+`);
+const deletePasswordResetTokensForUser = database.prepare(
+  "DELETE FROM password_reset_tokens WHERE user_id = @user_id"
+);
+const findValidPasswordResetToken = database.prepare(`
+  SELECT user_id
+  FROM password_reset_tokens
+  WHERE token_hash = @token_hash AND expires_at > @now
+`);
+const updatePasswordHash = database.prepare(
+  "UPDATE users SET password_hash = @password_hash WHERE id = @user_id"
+);
+const deletePasswordResetToken = database.prepare(
+  "DELETE FROM password_reset_tokens WHERE token_hash = @token_hash"
+);
+
+const createPasswordResetTokenTransaction = database.transaction(
+  (userId, tokenHash, expiresAt) => {
+    deletePasswordResetTokensForUser.run({ user_id: userId });
+    insertPasswordResetToken.run({
+      token_hash: tokenHash,
+      user_id: userId,
+      expires_at: expiresAt,
+      created_at: new Date().toISOString()
+    });
+  }
+);
+
+function createPasswordResetToken(userId, tokenHash, expiresAt) {
+  createPasswordResetTokenTransaction(userId, tokenHash, expiresAt);
+}
+
+const resetPasswordTransaction = database.transaction(
+  (tokenHash, passwordHash, now) => {
+    const resetToken = findValidPasswordResetToken.get({
+      token_hash: tokenHash,
+      now
+    });
+    if (!resetToken) {
+      return false;
+    }
+
+    updatePasswordHash.run({
+      password_hash: passwordHash,
+      user_id: resetToken.user_id
+    });
+    deletePasswordResetToken.run({ token_hash: tokenHash });
+    deletePasswordResetTokensForUser.run({ user_id: resetToken.user_id });
+    return true;
+  }
+);
+
+function resetPasswordWithToken(tokenHash, passwordHash, now = Date.now()) {
+  return resetPasswordTransaction(tokenHash, passwordHash, now);
 }
 
 const insertSensorReading = database.prepare(`
@@ -207,10 +277,12 @@ module.exports = {
   database,
   databasePath,
   createUser,
+  createPasswordResetToken,
   getPublicUserById,
   getUserByEmail,
   getLatestAppliedDeviceState,
   getLatestSensorReading,
+  resetPasswordWithToken,
   saveAppliedDecision,
   saveSensorReading
 };

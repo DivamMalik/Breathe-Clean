@@ -5,6 +5,8 @@ const App = {
   particles: [],
   analyticsData: null,
   pendingTargetMode: null,
+  dashboardRequestId: 0,
+  deviceRequestId: 0,
 
   init() {
     State.init();
@@ -96,9 +98,14 @@ const App = {
 
     if (State.activeView === 'dashboard') {
       this.startAirflowSimulation();
+      this.refreshDashboardFromBackend();
       if (this.showDashboardEntranceAnimation) {
         this.runDashboardLoadingAnimation();
       }
+    } else if (State.activeView === 'simulation') {
+      this.refreshSimulationFromBackend();
+    } else if (State.activeView === 'devices') {
+      this.refreshDevicesFromBackend();
     } else if (State.activeView === 'analytics') {
       this.renderAnalyticsChart();
     }
@@ -142,6 +149,11 @@ const App = {
 
         if (data === 'dashboard') {
           this.startAirflowSimulation();
+          this.refreshDashboardFromBackend();
+        } else if (data === 'simulation') {
+          this.refreshSimulationFromBackend();
+        } else if (data === 'devices') {
+          this.refreshDevicesFromBackend();
         } else if (data === 'analytics') {
           this.renderAnalyticsChart();
         }
@@ -159,11 +171,20 @@ const App = {
 
       const bodyContainer = document.getElementById('app-body-container');
       if (bodyContainer) {
-        if (State.activeView === 'dashboard' || State.activeView === 'simulation') {
+        if (
+          State.activeView === 'dashboard' ||
+          State.activeView === 'simulation' ||
+          (State.activeView === 'devices' && event === 'room_changed')
+        ) {
           bodyContainer.innerHTML = this.renderActiveViewContent();
           this.attachViewSpecificEvents();
           if (State.activeView === 'dashboard') {
             this.startAirflowSimulation();
+            if (event === 'room_changed') {
+              this.refreshDashboardFromBackend();
+            }
+          } else if (State.activeView === 'devices' && event === 'room_changed') {
+            this.refreshDevicesFromBackend();
           }
         }
       }
@@ -187,6 +208,145 @@ const App = {
     if (clock) {
       clock.textContent = Utils.formatTime(new Date());
     }
+  },
+
+  updateDashboardApiStatus(state, message) {
+    State.dashboardApiStatus = { state, message };
+    const statusMessage = document.getElementById('dashboard-backend-status-message');
+    if (statusMessage) statusMessage.textContent = message;
+    const retryButton = document.getElementById('btn-refresh-dashboard-data');
+    if (retryButton) retryButton.style.display = state === 'error' ? 'inline-flex' : 'none';
+  },
+
+  async refreshDashboardFromBackend() {
+    const requestId = ++this.dashboardRequestId;
+    const roomId = State.activeRoomId;
+    this.updateDashboardApiStatus('loading', 'Loading live sensor readings, device states, and decision from backend…');
+
+    try {
+      const dashboardData = await API.getDashboardData();
+      if (
+        requestId !== this.dashboardRequestId ||
+        State.activeView !== 'dashboard' ||
+        State.activeRoomId !== roomId
+      ) {
+        return;
+      }
+
+      State.applyDashboardDataFromBackend(dashboardData);
+      this.updateDashboardApiStatus('ready', 'Live dashboard data loaded from backend.');
+
+      const container = document.getElementById('app-body-container');
+      if (container) {
+        this.stopAirflowSimulation();
+        container.innerHTML = this.renderActiveViewContent();
+        this.attachViewSpecificEvents();
+        this.startAirflowSimulation();
+      }
+    } catch (error) {
+      if (
+        requestId === this.dashboardRequestId &&
+        State.activeView === 'dashboard' &&
+        State.activeRoomId === roomId
+      ) {
+        this.updateDashboardApiStatus(
+          'error',
+          `Live backend data is unavailable: ${error.message}. Displayed readings may be stale.`
+        );
+      }
+    }
+  },
+
+  async refreshDevicesFromBackend() {
+    const requestId = ++this.deviceRequestId;
+    const roomId = State.activeRoomId;
+    try {
+      const dashboardData = await API.getDashboardData();
+      if (
+        requestId !== this.deviceRequestId ||
+        State.activeView !== 'devices' ||
+        State.activeRoomId !== roomId
+      ) {
+        return;
+      }
+
+      State.applyDashboardDataFromBackend(dashboardData);
+      const container = document.getElementById('app-body-container');
+      if (container) {
+        container.innerHTML = this.renderActiveViewContent();
+        this.attachViewSpecificEvents();
+      }
+    } catch (error) {
+      if (
+        requestId === this.deviceRequestId &&
+        State.activeView === 'devices' &&
+        State.activeRoomId === roomId
+      ) {
+        Utils.showToast(`Could not load backend device state: ${error.message}`, 'warning');
+      }
+    }
+  },
+
+  async performDashboardControl(action, successMessage, successType = 'success') {
+    try {
+      const result = await action();
+      if (result?.success === false) {
+        throw new Error(result.message || 'The backend did not apply this action.');
+      }
+      if (State.activeView === 'dashboard') {
+        await this.refreshDashboardFromBackend();
+      } else if (State.activeView === 'simulation') {
+        this.syncSimulationControlsFromBackend();
+        this.updateSimulationReactionUI();
+      } else if (State.activeView === 'devices') {
+        const container = document.getElementById('app-body-container');
+        if (container) {
+          container.innerHTML = this.renderActiveViewContent();
+          this.attachViewSpecificEvents();
+        }
+      }
+      Utils.showToast(successMessage, successType);
+    } catch (error) {
+      const message = `Control was not applied: ${error.message}`;
+      this.updateDashboardApiStatus('error', message);
+      Utils.showToast(message, 'warning');
+    }
+  },
+
+  async refreshSimulationFromBackend() {
+    try {
+      const data = await API.getDashboardData();
+      if (State.activeView !== 'simulation') return;
+      State.applyDashboardDataFromBackend(data);
+      this.syncSimulationControlsFromBackend();
+      this.updateSimulationReactionUI();
+    } catch (error) {
+      Utils.showToast(`Live simulation data is unavailable: ${error.message}`, 'warning');
+    }
+  },
+
+  syncSimulationControlsFromBackend() {
+    const room = State.getActiveRoom();
+    if (!room) return;
+    const controls = [
+      ['sim-outdoor-aqi', 'val-outdoor-aqi', 'outdoorAQI', '', 0, value => Math.max(400, value)],
+      ['sim-indoor-aqi', 'val-indoor-aqi', 'indoorAQI', '', 0, value => Math.max(300, value)],
+      ['sim-co2', 'val-co2', 'co2', ' ppm', value => Math.min(350, value), value => Math.max(2200, value)],
+      ['sim-temperature', 'val-temperature', 'temperature', ' °C', value => Math.min(10, value), value => Math.max(40, value)],
+      ['sim-humidity', 'val-humidity', 'humidity', ' %', value => Math.min(10, value), value => Math.max(95, value)],
+      ['sim-occupancy', 'val-occupancy', 'occupancy', '', 0, value => Math.max(20, value)]
+    ];
+    controls.forEach(([inputId, displayId, key, suffix, min, max]) => {
+      const input = document.getElementById(inputId);
+      const display = document.getElementById(displayId);
+      if (input) {
+        if (typeof min === 'function') input.min = min(room.environment[key]);
+        else if (min !== undefined) input.min = min;
+        input.max = max(room.environment[key]);
+        input.value = room.environment[key];
+      }
+      if (display) display.textContent = `${room.environment[key]}${suffix}`;
+    });
   },
 
   // -------------------------------------------------------------
@@ -273,11 +433,11 @@ const App = {
     document.querySelectorAll('.mode-segmented-pill .mode-segment-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         const targetMode = btn.dataset.mode;
-        const activeRoom = State.getActiveRoom();
-        if (!activeRoom || activeRoom.mode === targetMode) return;
-
-        // Custom Confirmation Dialog (Requirement 23)
-        this.openModeConfirmModal(targetMode);
+        if (targetMode !== 'AUTO') return;
+        this.performDashboardControl(
+          () => State.applyDashboardDecision(),
+          'The backend applied its safety-validated policy.'
+        );
       });
     });
 
@@ -367,12 +527,21 @@ const App = {
           let next = 'Normal';
           if (dev.type === 'window') next = current === 'Open' ? 'Closed' : 'Open';
           else if (dev.type === 'ventilation') next = current === 'Normal' ? 'High' : (current === 'High' ? 'Filtered' : 'Normal');
-          else if (dev.type === 'purifier') next = current === 'Active' ? 'High' : (current === 'High' ? 'Off' : 'Active');
+          else if (dev.type === 'purifier') next = current === 'Active' ? 'Off' : 'Active';
 
-          await API.sendDeviceCommand(roomId, devId, next, 'YOU');
-          State.rooms = API.getRooms();
-          State.setActiveView('devices');
-          Utils.showToast(`${dev.name} toggled to ${next}`, 'success');
+          await this.performDashboardControl(
+            () => State.applyDashboardDeviceControl(devId, next, roomId),
+            `Backend accepted the safe ${dev.name} setting: ${next}.`
+          );
+        });
+      });
+      document.querySelectorAll('.preset-btn[data-preset]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const preset = btn.dataset.preset;
+          await this.performDashboardControl(
+            () => State.applyPreset(State.activeRoomId, preset),
+            `Backend accepted the validated "${preset}" preset.`
+          );
         });
       });
     } else if (view === 'assistant') {
@@ -386,6 +555,13 @@ const App = {
   // Dashboard Management Actions & Actuator Orchestration
   // -------------------------------------------------------------
   attachDashboardEvents() {
+    const refreshDashboardButton = document.getElementById('btn-refresh-dashboard-data');
+    if (refreshDashboardButton) {
+      refreshDashboardButton.addEventListener('click', () => {
+        this.refreshDashboardFromBackend();
+      });
+    }
+
     // 1. Direct interactive device controls
     document.querySelectorAll('.device-interactive-controls').forEach(group => {
       const deviceId = group.dataset.deviceId;
@@ -394,8 +570,10 @@ const App = {
           const newState = btn.dataset.state;
           const currentRoom = State.getActiveRoom();
           if (currentRoom && deviceId) {
-            await State.setDeviceStateManual(currentRoom.id, deviceId, newState);
-            Utils.showToast(`Actuator state set to ${newState}`, 'success');
+            await this.performDashboardControl(
+              () => State.applyDashboardDeviceControl(deviceId, newState),
+              `Backend accepted the safe actuator setting: ${newState}.`
+            );
           }
         });
       });
@@ -407,8 +585,10 @@ const App = {
       btnOptimize.addEventListener('click', async () => {
         const room = State.getActiveRoom();
         if (!room) return;
-        const res = await State.applyPreset(room.id, 'optimize');
-        Utils.showToast(res.message, 'success');
+        await this.performDashboardControl(
+          () => State.applyDashboardPreset('optimize'),
+          'The backend applied its validated air-quality decision.'
+        );
       });
     }
 
@@ -417,8 +597,10 @@ const App = {
       btnFlush.addEventListener('click', async () => {
         const room = State.getActiveRoom();
         if (!room) return;
-        const res = await State.applyPreset(room.id, 'flush');
-        Utils.showToast(res.message, 'success');
+        await this.performDashboardControl(
+          () => State.applyDashboardPreset('flush'),
+          'The backend accepted the safe rapid-flush actuator settings.'
+        );
       });
     }
 
@@ -427,8 +609,11 @@ const App = {
       btnEco.addEventListener('click', async () => {
         const room = State.getActiveRoom();
         if (!room) return;
-        const res = await State.applyPreset(room.id, 'eco');
-        Utils.showToast(res.message, 'info');
+        await this.performDashboardControl(
+          () => State.applyDashboardPreset('eco'),
+          'The backend accepted the safe eco actuator settings.',
+          'info'
+        );
       });
     }
 
@@ -437,8 +622,11 @@ const App = {
       btnSeal.addEventListener('click', async () => {
         const room = State.getActiveRoom();
         if (!room) return;
-        const res = await State.applyPreset(room.id, 'seal');
-        Utils.showToast(res.message, 'warning');
+        await this.performDashboardControl(
+          () => State.applyDashboardPreset('seal'),
+          'The backend accepted the safe perimeter-seal settings.',
+          'info'
+        );
       });
     }
 
@@ -450,19 +638,6 @@ const App = {
     const btnCardStandards = document.getElementById('btn-card-standards-pill');
     if (btnCardStandards) {
       btnCardStandards.addEventListener('click', () => this.openStandardsModal());
-    }
-
-    const btnCalibrate = document.getElementById('btn-recalibrate-sensors');
-    if (btnCalibrate) {
-      btnCalibrate.addEventListener('click', () => {
-        btnCalibrate.disabled = true;
-        btnCalibrate.innerHTML = `${Utils.icons.refresh} <span>Calibrating...</span>`;
-        setTimeout(() => {
-          btnCalibrate.disabled = false;
-          btnCalibrate.innerHTML = `${Utils.icons.refresh} <span>Calibrate Sensors</span>`;
-          Utils.showToast('Sensor array recalibrated: Plantower laser & Senseair NDIR zero points aligned', 'success');
-        }, 800);
-      });
     }
 
     const btnExport = document.getElementById('btn-export-telemetry');
@@ -513,20 +688,10 @@ const App = {
       btnReevaluate.addEventListener('click', async () => {
         const room = State.getActiveRoom();
         if (room) {
-          await State.evaluateRoom(room.id);
-          Utils.showToast('Decision engine re-evaluated: latest ambient setpoints confirmed', 'success');
-        }
-      });
-    }
-
-    const btnToggleOverride = document.getElementById('btn-toggle-override');
-    if (btnToggleOverride) {
-      btnToggleOverride.addEventListener('click', async () => {
-        const room = State.getActiveRoom();
-        if (room) {
-          const nextMode = room.mode === 'AUTO' ? 'MANUAL' : 'AUTO';
-          await State.setMode(room.id, nextMode);
-          Utils.showToast(`System switched to ${nextMode} mode`, 'info');
+          await this.performDashboardControl(
+            () => State.applyDashboardDecision(),
+            'The backend re-evaluated and applied its validated decision.'
+          );
         }
       });
     }
@@ -544,8 +709,10 @@ const App = {
       btnSyncAll.addEventListener('click', async () => {
         const room = State.getActiveRoom();
         if (room) {
-          await State.evaluateRoom(room.id);
-          Utils.showToast('All 3 hardware actuators synchronized with controller targets', 'success');
+          await this.performDashboardControl(
+            () => State.applyDashboardDecision(),
+            'All actuators were synchronized with the backend-approved targets.'
+          );
         }
       });
     }
@@ -555,13 +722,15 @@ const App = {
       btnStandbyAll.addEventListener('click', async () => {
         const room = State.getActiveRoom();
         if (room) {
-          for (const d of room.devices) {
-            const idle = d.type === 'window' ? 'Closed' : (d.type === 'purifier' ? 'Off' : 'Low');
-            await API.sendDeviceCommand(room.id, d.id, idle, 'USER_STANDBY');
-          }
-          State.rooms = API.getRooms();
-          await State.evaluateRoom(room.id);
-          Utils.showToast('All devices safely placed on idle standby', 'info');
+          await this.performDashboardControl(
+            () => State.applyDashboardDeviceUpdates({
+              windows: 'CLOSED',
+              purifier: 'OFF',
+              ventilation: 'LOW'
+            }),
+            'The backend accepted the standby settings.',
+            'info'
+          );
         }
       });
     }
@@ -582,21 +751,13 @@ const App = {
     const btnSimulate = document.getElementById('btn-simulate-event');
     if (btnSimulate) {
       btnSimulate.addEventListener('click', async () => {
-        const room = State.getActiveRoom();
-        if (!room) return;
-        const spikes = [
-          { name: 'Cooking emissions peak', aqi: 125, co2: 1150 },
-          { name: 'Outdoor dust wave detected', outAqi: 185 },
-          { name: 'High room occupancy surge', co2: 1350, people: 5 }
-        ];
-        const spike = spikes[Math.floor(Math.random() * spikes.length)];
-        if (spike.aqi) room.environment.indoorAQI = spike.aqi;
-        if (spike.co2) room.environment.co2 = spike.co2;
-        if (spike.outAqi) room.environment.outdoorAQI = spike.outAqi;
-        if (spike.people) room.environment.occupancy = spike.people;
-        await API.updateRoomEnvironment(room.id, room.environment);
-        await State.evaluateRoom(room.id);
-        Utils.showToast(`Simulated event injected: ${spike.name}. System reacted in real-time.`, 'warning');
+        const scenarios = ['clean-air', 'pollution', 'high-co2', 'bad-air'];
+        const scenario = scenarios[Math.floor(Math.random() * scenarios.length)];
+        await this.performDashboardControl(
+          () => State.applyDashboardScenario(scenario),
+          `Backend scenario "${scenario}" ran and its safety-validated decision was applied.`,
+          'warning'
+        );
       });
     }
 
@@ -617,36 +778,14 @@ const App = {
       });
     }
 
-    // 7. Secondary diagnostics actions
-    const btnRunDiag = document.getElementById('btn-run-sensor-diagnostics');
-    if (btnRunDiag) {
-      btnRunDiag.addEventListener('click', () => {
-        btnRunDiag.disabled = true;
-        btnRunDiag.innerHTML = `${Utils.icons.activity} <span>Testing...</span>`;
-        setTimeout(() => {
-          btnRunDiag.disabled = false;
-          btnRunDiag.innerHTML = `${Utils.icons.activity} <span>Run Self-Diagnostic</span>`;
-          Utils.showToast('Sensor diagnostic test passed: 4/4 sensors operational within ±1.2% tolerance', 'success');
-        }, 700);
-      });
-    }
-
-    const btnZeroBase = document.getElementById('btn-zero-baseline');
-    if (btnZeroBase) {
-      btnZeroBase.addEventListener('click', () => {
-        Utils.showToast('SGP40 and NDIR baselines re-zeroed to ambient reference standard', 'info');
-      });
-    }
-
-    // 8. 1-Click Operational Presets
+    // 7. 1-Click Operational Presets
     document.querySelectorAll('.preset-btn[data-preset]').forEach(btn => {
       btn.addEventListener('click', async () => {
         const preset = btn.dataset.preset;
-        const room = State.getActiveRoom();
-        if (!room) return;
-
-        const res = await State.applyPreset(room.id, preset);
-        Utils.showToast(res.message, res.success ? 'success' : 'info');
+        await this.performDashboardControl(
+          () => State.applyPreset(State.activeRoomId, preset),
+          `Backend accepted the validated "${preset}" preset.`
+        );
       });
     });
 
@@ -863,49 +1002,28 @@ const App = {
       const el = document.getElementById(s.id);
       const disp = document.getElementById(s.disp);
       if (el && disp) {
-        el.addEventListener('input', async (e) => {
+        el.addEventListener('input', (e) => {
           const val = Number(e.target.value);
           disp.textContent = `${val}${s.suffix}`;
-          
-          // Live update active room environment & re-evaluate
-          await State.updateEnvironment(activeRoom.id, { [s.key]: val });
-          this.updateSimulationReactionUI();
+        });
+        el.addEventListener('change', async (e) => {
+          const value = Number(e.target.value);
+          await this.performDashboardControl(
+            () => State.updateDashboardSensors({ [s.key]: value }),
+            `Backend sensor reading updated and the safety policy was applied.`
+          );
         });
       }
     });
 
-    // Preset Buttons
-    document.querySelectorAll('.preset-btn').forEach(btn => {
+    document.querySelectorAll('.preset-btn[data-scenario]').forEach(btn => {
       btn.addEventListener('click', async () => {
-        const preset = btn.dataset.preset;
-        let updates = {};
-
-        if (preset === 'smog') {
-          updates = { outdoorAQI: 165, indoorAQI: 58, co2: 680, temperature: 26, humidity: 45, occupancy: 2 };
-        } else if (preset === 'fresh') {
-          updates = { outdoorAQI: 22, indoorAQI: 30, co2: 520, temperature: 21, humidity: 52, occupancy: 1 };
-        } else if (preset === 'crowded') {
-          updates = { outdoorAQI: 45, indoorAQI: 62, co2: 1380, temperature: 25, humidity: 58, occupancy: 8 };
-        } else if (preset === 'indoor-smoke') {
-          updates = { outdoorAQI: 35, indoorAQI: 145, co2: 740, temperature: 24, humidity: 50, occupancy: 2 };
-        } else if (preset === 'optimal') {
-          updates = { outdoorAQI: 32, indoorAQI: 24, co2: 580, temperature: 23, humidity: 48, occupancy: 1 };
-        }
-
-        await State.updateEnvironment(activeRoom.id, updates);
-        
-        // Update slider positions & displays
-        sliders.forEach(s => {
-          const el = document.getElementById(s.id);
-          const disp = document.getElementById(s.disp);
-          if (el && disp && updates[s.key] !== undefined) {
-            el.value = updates[s.key];
-            disp.textContent = `${updates[s.key]}${s.suffix}`;
-          }
-        });
-
-        this.updateSimulationReactionUI();
-        Utils.showToast(`Applied preset scenario: ${btn.textContent}`, 'info');
+        const scenario = btn.dataset.scenario;
+        await this.performDashboardControl(
+          () => State.applyDashboardScenario(scenario),
+          `Backend scenario "${scenario}" ran and its safety-validated decision was applied.`,
+          'info'
+        );
       });
     });
   },
@@ -1313,41 +1431,6 @@ const App = {
   // -------------------------------------------------------------
   // Modals & Confirmations
   // -------------------------------------------------------------
-  openModeConfirmModal(targetMode) {
-    const container = document.getElementById('modal-container');
-    if (!container) return;
-
-    this.pendingTargetMode = targetMode;
-    container.innerHTML = Views.renderModeConfirmModal(targetMode);
-
-    const backdrop = document.getElementById('mode-confirm-modal-backdrop');
-    const cancelBtn = document.getElementById('btn-mode-cancel');
-    const confirmBtn = document.getElementById('btn-mode-confirm');
-
-    const closeModal = () => {
-      if (container) container.innerHTML = '';
-      this.pendingTargetMode = null;
-    };
-
-    if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
-    if (backdrop) {
-      backdrop.addEventListener('click', (e) => {
-        if (e.target === backdrop) closeModal();
-      });
-    }
-
-    if (confirmBtn) {
-      confirmBtn.addEventListener('click', async () => {
-        const activeRoom = State.getActiveRoom();
-        if (activeRoom && this.pendingTargetMode) {
-          await State.setMode(activeRoom.id, this.pendingTargetMode);
-          Utils.showToast(`Switched to ${this.pendingTargetMode} mode`, 'success');
-        }
-        closeModal();
-      });
-    }
-  },
-
   openStandardsModal() {
     const container = document.getElementById('modal-container');
     if (!container) return;
@@ -1358,8 +1441,6 @@ const App = {
     const backdrop = document.getElementById('standards-modal-backdrop');
     const closeBtn = document.getElementById('btn-close-standards-modal');
     const dismissBtn = document.getElementById('btn-dismiss-standards-modal');
-    const recalcBtn = document.getElementById('btn-recalc-standards');
-
     const closeModal = () => { if (container) container.innerHTML = ''; };
 
     if (closeBtn) closeBtn.addEventListener('click', closeModal);
@@ -1370,15 +1451,6 @@ const App = {
       });
     }
 
-    if (recalcBtn) {
-      recalcBtn.addEventListener('click', async () => {
-        if (activeRoom) {
-          await State.evaluateRoom(activeRoom.id, true);
-          this.openStandardsModal();
-          Utils.showToast('ASHRAE compliance metrics recalculated', 'success');
-        }
-      });
-    }
   },
 
   openSpaceModal(roomToEdit = null) {
@@ -1672,6 +1744,11 @@ const App = {
     const formSignUp = document.getElementById('form-sign-up');
     const btnGotoSignUp = document.getElementById('btn-goto-signup');
     const btnGotoSignIn = document.getElementById('btn-goto-signin');
+    const forgotPasswordLink = document.getElementById('link-forgot-pw');
+    const recoveryPanel = document.getElementById('password-recovery-panel');
+    const formRequestReset = document.getElementById('form-request-password-reset');
+    const formConfirmReset = document.getElementById('form-confirm-password-reset');
+    const resetStatus = document.getElementById('password-reset-status');
 
     // Initialize Google Identity Services if client ID is set
     this.initGoogleAuthSDK();
@@ -1926,6 +2003,11 @@ const App = {
     if (formSignIn) {
       formSignIn.addEventListener('submit', async (e) => {
         e.preventDefault();
+        const errorElement = document.getElementById('signin-error');
+        if (errorElement) {
+          errorElement.textContent = '';
+          errorElement.style.display = 'none';
+        }
         const email = document.getElementById('signin-email').value;
         const password = document.getElementById('signin-password').value;
         const remember = document.getElementById('signin-remember').checked;
@@ -1940,8 +2022,113 @@ const App = {
           this.renderCurrentApplicationState();
           Utils.showToast(`Welcome back, ${user.name}`, 'success');
         } catch (err) {
+          if (errorElement) {
+            errorElement.textContent = err.message === 'Invalid email or password'
+              ? 'We couldn’t sign you in with that email and password. Check them and try again.'
+              : err.message;
+            errorElement.style.display = 'block';
+          }
           Utils.showToast(err.message, 'warning');
         }
+      });
+    }
+
+    if (forgotPasswordLink && recoveryPanel && formSignIn) {
+      forgotPasswordLink.addEventListener('click', (event) => {
+        event.preventDefault();
+        const emailInput = document.getElementById('reset-email');
+        if (emailInput) {
+          emailInput.value = document.getElementById('signin-email').value;
+        }
+        formSignIn.style.display = 'none';
+        recoveryPanel.style.display = 'flex';
+        document.getElementById('signin-auth-divider').style.display = 'none';
+        document.getElementById('g_id_signin').style.display = 'none';
+        document.getElementById('btn-google-signin').style.display = 'none';
+        document.querySelector('.auth-form-footer').style.display = 'none';
+        document.querySelector('.auth-form-inner > .auth-form-header').style.display = 'none';
+        if (resetStatus) {
+          resetStatus.textContent = '';
+          resetStatus.style.display = 'none';
+        }
+        emailInput?.focus();
+      });
+    }
+
+    if (formRequestReset && formConfirmReset && resetStatus) {
+      formRequestReset.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        resetStatus.textContent = '';
+        resetStatus.style.display = 'none';
+        try {
+          const result = await API.requestPasswordReset(
+            document.getElementById('reset-email').value
+          );
+          resetStatus.textContent = result.resetToken
+            ? 'No email was sent. Copy this local development token and use it below; it expires in 15 minutes.'
+            : result.message;
+          resetStatus.style.color = 'var(--color-text-muted)';
+          resetStatus.style.display = 'block';
+          if (result.resetToken) {
+            document.getElementById('reset-token').value = result.resetToken;
+            formRequestReset.style.display = 'none';
+            formConfirmReset.style.display = 'flex';
+          }
+        } catch (err) {
+          resetStatus.textContent = err.message;
+          resetStatus.style.color = '#b91c1c';
+          resetStatus.style.display = 'block';
+        }
+      });
+
+      formConfirmReset.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const password = document.getElementById('reset-new-password').value;
+        const confirmation = document.getElementById('reset-confirm-password').value;
+        if (password !== confirmation) {
+          resetStatus.textContent = 'The new passwords do not match.';
+          resetStatus.style.color = '#b91c1c';
+          resetStatus.style.display = 'block';
+          return;
+        }
+
+        try {
+          const result = await API.resetPassword(
+            document.getElementById('reset-token').value,
+            password
+          );
+          formConfirmReset.style.display = 'none';
+          resetStatus.textContent = result.message;
+          resetStatus.style.color = 'var(--color-text-muted)';
+          resetStatus.style.display = 'block';
+        } catch (err) {
+          resetStatus.textContent = err.message;
+          resetStatus.style.color = '#b91c1c';
+          resetStatus.style.display = 'block';
+        }
+      });
+    }
+
+    const btnBackToSignIn = document.getElementById('btn-back-to-signin');
+    if (btnBackToSignIn && recoveryPanel && formSignIn) {
+      btnBackToSignIn.addEventListener('click', () => {
+        recoveryPanel.style.display = 'none';
+        formSignIn.style.display = 'flex';
+        const signInError = document.getElementById('signin-error');
+        if (signInError) {
+          signInError.textContent = '';
+          signInError.style.display = 'none';
+        }
+        document.getElementById('signin-auth-divider').style.display = '';
+        document.getElementById('btn-google-signin').style.display = '';
+        document.querySelector('.auth-form-footer').style.display = '';
+        document.querySelector('.auth-form-inner > .auth-form-header').style.display = '';
+        formRequestReset.style.display = 'flex';
+        formConfirmReset.style.display = 'none';
+        formRequestReset.reset();
+        formConfirmReset.reset();
+        resetStatus.textContent = '';
+        resetStatus.style.display = 'none';
       });
     }
 

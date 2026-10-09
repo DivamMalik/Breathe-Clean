@@ -7,6 +7,9 @@ const STORAGE_KEYS = {
   SETTINGS: 'breatheclean_settings'
 };
 
+const API_BASE_URL = (window.BREATHE_CLEAN_API_BASE || 'http://localhost:5001/api')
+  .replace(/\/+$/, '');
+
 const DEFAULT_ROOMS = [
   {
     id: 'room_bedroom',
@@ -218,20 +221,102 @@ const API = {
     return new Promise(resolve => setTimeout(resolve, ms));
   },
 
-  // Auth Endpoints
+  async _authRequest(endpoint, credentials) {
+    const response = await fetch(`${API_BASE_URL}/auth/${endpoint}`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(credentials)
+    });
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.error || 'Authentication request failed');
+    }
+
+    return result;
+  },
+
+  async _getDashboardResource(resource) {
+    const response = await fetch(`${API_BASE_URL}/${resource}`, {
+      method: 'GET',
+      credentials: 'include',
+      headers: { Accept: 'application/json' }
+    });
+    const result = await response.json();
+
+    if (!response.ok || result.success !== true) {
+      throw new Error(result.error || `Unable to load ${resource}`);
+    }
+
+    return result;
+  },
+
+  async getDashboardData() {
+    const [sensors, devices, decision] = await Promise.all([
+      this._getDashboardResource('sensors'),
+      this._getDashboardResource('devices'),
+      this._getDashboardResource('decision')
+    ]);
+
+    return {
+      sensors: sensors.sensorData,
+      devices: devices.deviceState,
+      decision: decision.decision
+    };
+  },
+
+  async _sendDashboardRequest(endpoint, method, body) {
+    const response = await fetch(`${API_BASE_URL}/${endpoint}`, {
+      method,
+      credentials: 'include',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body)
+    });
+    const result = await response.json();
+
+    if (!response.ok || result.success !== true) {
+      throw new Error(result.error || `Unable to update ${endpoint}`);
+    }
+    if (endpoint === 'decision/apply' && result.applied !== true) {
+      throw new Error('The backend did not apply the validated decision.');
+    }
+
+    return result;
+  },
+
+  async updateDashboardDevices(updates) {
+    return this._sendDashboardRequest('devices', 'PUT', updates);
+  },
+
+  async applyDashboardDecision(decision) {
+    return this._sendDashboardRequest('decision/apply', 'POST', decision);
+  },
+
+  async updateDashboardSensors(updates) {
+    return this._sendDashboardRequest('sensors', 'PUT', updates);
+  },
+
+  async runDashboardScenario(scenario) {
+    return this._sendDashboardRequest(`simulation/${encodeURIComponent(scenario)}`, 'POST', {});
+  },
+
   async login(email, password, rememberMe = true) {
-    await this._delay();
     if (!email || !password) throw new Error('Email and password are required');
+    const { user: authenticatedUser } = await this._authRequest('login', { email, password });
     const user = {
-      id: 'usr_divam_01',
+      ...authenticatedUser,
       name: email.split('@')[0].replace('.', ' ').replace(/^./, str => str.toUpperCase()) || 'Divam',
-      email: email,
       isOnboarded: true,
       lastLogin: new Date().toISOString()
     };
     if (rememberMe) {
       localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
     } else {
+      localStorage.removeItem(STORAGE_KEYS.USER);
       sessionStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
     }
     return user;
@@ -292,17 +377,27 @@ const API = {
   },
 
   async signup(name, email, password) {
-    await this._delay();
     if (!email || !password || !name) throw new Error('All fields are required');
+    const { user: registeredUser } = await this._authRequest('register', { email, password });
+    await this._authRequest('login', { email, password });
     const user = {
-      id: Utils.generateId('usr'),
-      name: name,
-      email: email,
+      ...registeredUser,
+      name: name.trim(),
+      email: registeredUser.email,
       isOnboarded: false, // Triggers first-time onboarding
       createdAt: new Date().toISOString()
     };
     localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
     return user;
+  },
+
+  async requestPasswordReset(email) {
+    if (!email) throw new Error('Enter the email address for your account');
+    return this._authRequest('password-reset/request', { email });
+  },
+
+  async resetPassword(token, password) {
+    return this._authRequest('password-reset/confirm', { token, password });
   },
 
   async logout() {

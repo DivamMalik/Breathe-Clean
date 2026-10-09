@@ -7,6 +7,7 @@ Install dependencies and configure `backend/.env`:
 ```dotenv
 PORT=5001
 SESSION_SECRET=replace-with-a-random-secret-at-least-32-bytes-long
+PASSWORD_RESET_DEV_TOKEN=true
 # Set this to the exact frontend origin when browser requests need cross-origin cookies.
 # CORS_ORIGIN=http://localhost:3000
 ```
@@ -33,6 +34,16 @@ cookie is HttpOnly, SameSite=Lax, and expires after eight hours.
   creates an account and returns the public user id and normalized email.
 - `POST /api/auth/login` with the same JSON fields authenticates the user,
   creates a server-managed SQLite session, and sets the `breathe.sid` cookie.
+- `POST /api/auth/password-reset/request` accepts `{ "email": "..." }`.
+  Without an email delivery service, production returns `503` and does not
+  create a reset token. In local development, set
+  `PASSWORD_RESET_DEV_TOKEN=true`; an existing account
+  receives a 32-byte random, single-use token in the JSON response. No email is
+  sent, and the token is never written to logs; use the returned token directly
+  in the confirmation request.
+- `POST /api/auth/password-reset/confirm` accepts
+  `{ "token": "...", "password": "..." }`. Tokens expire after 15 minutes,
+  are stored only as SHA-256 hashes, and cannot be reused.
 
 Passwords must be at least 12 characters and at most 72 UTF-8 bytes. Existing
 sensor, device, decision, and simulation endpoints remain public. Future routes

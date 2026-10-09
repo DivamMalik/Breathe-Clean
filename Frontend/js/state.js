@@ -6,6 +6,10 @@ const State = {
   activeRoomId: null,
   activeView: 'dashboard',
   decision: null,
+  dashboardApiStatus: {
+    state: 'idle',
+    message: 'Live backend readings have not loaded yet.'
+  },
   listeners: [],
 
   init() {
@@ -202,6 +206,158 @@ const State = {
     return decision;
   },
 
+  applyDashboardDataFromBackend(data) {
+    const room = this.getActiveRoom();
+    if (!room || !data || !data.sensors || !data.devices || !data.decision) {
+      throw new Error('The backend returned incomplete dashboard data.');
+    }
+
+    const numericSensorFields = [
+      'indoorAQI',
+      'outdoorAQI',
+      'co2',
+      'temperature',
+      'humidity',
+      'occupancy'
+    ];
+    if (
+      typeof data.sensors.room !== 'string' ||
+      numericSensorFields.some((field) => !Number.isFinite(data.sensors[field]))
+    ) {
+      throw new Error('The backend returned incomplete or invalid sensor readings.');
+    }
+
+    const { windows, purifier, ventilation, mode, reason } = data.decision;
+    if (
+      !['OPEN', 'CLOSED'].includes(windows) ||
+      !['ON', 'OFF'].includes(purifier) ||
+      !['LOW', 'NORMAL', 'HIGH', 'FILTERED'].includes(ventilation) ||
+      !['NORMAL', 'PURIFICATION', 'VENTILATION'].includes(mode) ||
+      typeof reason !== 'string' ||
+      !['OPEN', 'CLOSED'].includes(data.devices.windows) ||
+      !['ON', 'OFF'].includes(data.devices.purifier) ||
+      !['LOW', 'NORMAL', 'HIGH', 'FILTERED'].includes(data.devices.ventilation) ||
+      !['NORMAL', 'PURIFICATION', 'VENTILATION'].includes(data.devices.mode)
+    ) {
+      throw new Error('The backend returned invalid device states or an invalid air-quality decision.');
+    }
+
+    room.environment = { ...room.environment, ...data.sensors };
+    const displayDeviceStates = {
+      window: data.devices.windows === 'OPEN' ? 'Open' : 'Closed',
+      ventilation: data.devices.ventilation.charAt(0) + data.devices.ventilation.slice(1).toLowerCase(),
+      purifier: data.devices.purifier === 'ON' ? 'Active' : 'Off'
+    };
+    room.devices.forEach((device) => {
+      if (Object.hasOwn(displayDeviceStates, device.type)) {
+        device.state = displayDeviceStates[device.type];
+        device.lastUpdated = new Date().toISOString();
+      }
+    });
+
+    const decisionStates = {
+      window: windows === 'OPEN' ? 'Open' : 'Closed',
+      ventilation: ventilation.charAt(0) + ventilation.slice(1).toLowerCase(),
+      purifier: purifier === 'ON' ? 'Active' : 'Off'
+    };
+    const titles = {
+      NORMAL: 'Air quality conditions are within configured thresholds.',
+      PURIFICATION: 'Outdoor air pollution detected; purification is active.',
+      VENTILATION: 'High CO₂ detected; fresh-air ventilation is active.'
+    };
+    const decision = {
+      ...data.decision,
+      window: decisionStates.window,
+      purifier: decisionStates.purifier,
+      ventilation: decisionStates.ventilation,
+      title: titles[mode],
+      action: `Recommended: windows ${decisionStates.window.toLowerCase()}, ventilation ${decisionStates.ventilation.toLowerCase()}, purifier ${decisionStates.purifier.toLowerCase()}.`,
+      expectedOutcome: 'Device recommendations reflect the latest backend sensor readings and safety rules.',
+      statusLevel: mode === 'PURIFICATION' ? 'elevated' : 'good',
+      timestamp: new Date().toISOString()
+    };
+    room.decision = decision;
+    this.decision = decision;
+  },
+
+  async applyDashboardDeviceUpdates(updates) {
+    const result = await API.updateDashboardDevices(updates);
+    this.applyDashboardDataFromBackend(await API.getDashboardData());
+    this.notify('device_updated', result.deviceState);
+    return result;
+  },
+
+  async applyDashboardDecision() {
+    const currentData = await API.getDashboardData();
+    const result = await API.applyDashboardDecision(currentData.decision);
+    this.applyDashboardDataFromBackend(await API.getDashboardData());
+    this.notify('device_updated', result.deviceState);
+    return result;
+  },
+
+  async applyDashboardScenario(scenario) {
+    const simulation = await API.runDashboardScenario(scenario);
+    const applied = await API.applyDashboardDecision(simulation.decision);
+    this.applyDashboardDataFromBackend(await API.getDashboardData());
+    this.notify('environment_updated', this.getActiveRoom());
+    return { ...simulation, deviceState: applied.deviceState };
+  },
+
+  async updateDashboardSensors(updates) {
+    await API.updateDashboardSensors(updates);
+    const currentData = await API.getDashboardData();
+    await API.applyDashboardDecision(currentData.decision);
+    this.applyDashboardDataFromBackend(await API.getDashboardData());
+    this.notify('environment_updated', this.getActiveRoom());
+  },
+
+  async applyDashboardDeviceControl(deviceId, newState, roomId = this.activeRoomId) {
+    const room = this.getRoom(roomId);
+    const device = room?.devices.find((item) => item.id === deviceId);
+    if (!device) throw new Error('The selected device is not available.');
+
+    const fieldByType = {
+      window: 'windows',
+      ventilation: 'ventilation',
+      purifier: 'purifier'
+    };
+    const valuesByType = {
+      window: { Open: 'OPEN', Closed: 'CLOSED' },
+      ventilation: {
+        Low: 'LOW',
+        Normal: 'NORMAL',
+        High: 'HIGH',
+        Filtered: 'FILTERED'
+      },
+      purifier: { Off: 'OFF', Active: 'ON' }
+    };
+    const field = fieldByType[device.type];
+    const value = valuesByType[device.type]?.[newState];
+    if (!field || !value) {
+      throw new Error(`Unsupported ${device.type} setting: ${newState}`);
+    }
+
+    return this.applyDashboardDeviceUpdates({ [field]: value });
+  },
+
+  async applyDashboardPreset(presetName) {
+    if (presetName === 'optimize') {
+      return this.applyDashboardDecision();
+    }
+
+    let updates;
+    if (presetName === 'seal') {
+      updates = { windows: 'CLOSED', purifier: 'ON', ventilation: 'FILTERED' };
+    } else {
+      if (['eco', 'sleep', 'flush'].includes(presetName)) {
+        throw new Error(`${presetName} preset is not supported by the backend.`);
+      }
+      throw new Error(`Unsupported dashboard preset: ${presetName}`);
+    }
+
+    return this.applyDashboardDeviceUpdates(updates);
+  },
+
   async updateEnvironment(roomId, updates) {
     const room = this.getRoom(roomId);
     if (!room) return;
@@ -219,73 +375,26 @@ const State = {
   async setDeviceStateManual(roomId, deviceId, newState) {
     const room = this.getRoom(roomId);
     if (!room) return;
-
-    // Direct manual device control switches room to Manual mode so autonomous logic doesn't override user
-    if (room.mode === 'AUTO') {
-      await this.setMode(roomId, 'MANUAL');
-    }
-
-    await API.sendDeviceCommand(roomId, deviceId, newState, 'YOU');
-    this.rooms = API.getRooms();
-    this.notify('device_updated', { roomId, deviceId, newState });
+    return this.applyDashboardDeviceControl(deviceId, newState, roomId);
   },
 
   async applyPreset(roomId, presetName) {
     const room = this.getRoom(roomId);
     if (!room) return { success: false, message: 'Room not found' };
 
-    const win = room.devices.find(d => d.type === 'window');
-    const vent = room.devices.find(d => d.type === 'ventilation');
-    const pur = room.devices.find(d => d.type === 'purifier');
-
     if (presetName === 'optimize') {
-      await this.setMode(roomId, 'AUTO');
-      await this.evaluateRoom(roomId, true);
-      return { success: true, message: 'All IAQ actuators synchronized with ASHRAE 62.1 optimal setpoints' };
+      const result = await this.applyDashboardDecision();
+      return { success: true, message: result.reason };
     }
 
-    // Manual presets switch space to Manual control
-    if (room.mode === 'AUTO') {
-      await this.setMode(roomId, 'MANUAL');
+    const presetMap = { seal: 'seal', smog: 'seal', shield: 'seal' };
+    if (presetMap[presetName]) {
+      const result = await this.applyDashboardPreset(presetMap[presetName]);
+      return { success: true, message: result.deviceState.mode };
     }
-
-    if (presetName === 'flush') {
-      const winTarget = (room.environment.outdoorAQI <= 60 && win) ? 'Open' : 'Closed';
-      if (win) await API.sendDeviceCommand(room.id, win.id, winTarget, 'QUICK_FLUSH');
-      if (vent) await API.sendDeviceCommand(room.id, vent.id, 'High', 'QUICK_FLUSH');
-      if (pur) await API.sendDeviceCommand(room.id, pur.id, 'High', 'QUICK_FLUSH');
-      this.rooms = API.getRooms();
-      this.notify('device_updated', { roomId });
-      return { success: true, message: 'Rapid air displacement purge initiated at maximum CADR rate' };
+    if (['eco', 'sleep', 'flush'].includes(presetName)) {
+      return { success: false, message: `${presetName} preset is not supported by the backend.` };
     }
-
-    if (presetName === 'eco' || presetName === 'sleep') {
-      if (win) await API.sendDeviceCommand(room.id, win.id, 'Closed', 'ECO_MODE');
-      if (vent) await API.sendDeviceCommand(room.id, vent.id, 'Low', 'ECO_MODE');
-      if (pur) await API.sendDeviceCommand(room.id, pur.id, 'Low', 'ECO_MODE');
-      this.rooms = API.getRooms();
-      this.notify('device_updated', { roomId });
-      return { success: true, message: 'Eco Silent whisper mode active (<22 dB, minimum energy consumption)' };
-    }
-
-    if (presetName === 'seal' || presetName === 'smog') {
-      if (win) await API.sendDeviceCommand(room.id, win.id, 'Closed', 'PERIMETER_SEAL');
-      if (vent) await API.sendDeviceCommand(room.id, vent.id, 'Filtered', 'PERIMETER_SEAL');
-      if (pur) await API.sendDeviceCommand(room.id, pur.id, 'High', 'PERIMETER_SEAL');
-      this.rooms = API.getRooms();
-      this.notify('device_updated', { roomId });
-      return { success: true, message: 'Perimeter Sealed: Windows hermetically closed, MERV-13 recirculation active' };
-    }
-
-    if (presetName === 'shield') {
-      if (win) await API.sendDeviceCommand(room.id, win.id, 'Closed', 'CLEAN_SHIELD');
-      if (vent) await API.sendDeviceCommand(room.id, vent.id, 'Filtered', 'CLEAN_SHIELD');
-      if (pur) await API.sendDeviceCommand(room.id, pur.id, 'Active', 'CLEAN_SHIELD');
-      this.rooms = API.getRooms();
-      this.notify('device_updated', { roomId });
-      return { success: true, message: 'Clean Air Shield active: Max protection against ambient smog' };
-    }
-
     return { success: false, message: 'Unknown preset requested' };
   },
 

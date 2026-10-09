@@ -67,7 +67,16 @@ const Chatbot = {
     this.save();
 
     // Generate AI response & execute functions
-    const reply = await this.interpretAndExecute(trimmed);
+    let reply;
+    try {
+      reply = await this.interpretAndExecute(trimmed);
+    } catch (error) {
+      reply = {
+        text: `The backend did not apply that action: ${error.message}`,
+        actionTag: 'Action Not Applied',
+        actionDetails: error.message
+      };
+    }
 
     const botMsg = {
       id: Utils.generateId('msg_bot'),
@@ -92,25 +101,21 @@ const Chatbot = {
     // 1. SYSTEM MODE CONTROL (AUTO vs MANUAL)
     // -------------------------------------------------------------
     if (q.includes('manual mode') || q.includes('switch to manual') || q.includes('set mode to manual') || q.includes('enable manual') || q.includes('take manual control')) {
-      if (activeRoom) {
-        await State.setMode(activeRoom.id, 'MANUAL');
-        Utils.showToast(`Switched ${activeRoom.name} to MANUAL mode`, 'success');
-        return {
-          text: `I've switched **${activeRoom.name}** to **MANUAL Mode**. Automatic adjustments are paused. You now have full direct control over smart windows, ventilation, and air purification.`,
-          actionTag: 'Mode Changed',
-          actionDetails: `Set ${activeRoom.name} to MANUAL`
-        };
-      }
+      return {
+        text: 'Persistent AUTO/MANUAL mode is not supported by the backend. Individual device requests can be submitted, but the backend will reject any state that conflicts with current sensor safety rules.',
+        actionTag: 'Unsupported',
+        actionDetails: 'No backend room-mode endpoint'
+      };
     }
 
     if (q.includes('auto mode') || q.includes('switch to auto') || q.includes('set mode to auto') || q.includes('enable auto') || q.includes('automatic mode') || q.includes('resume auto')) {
       if (activeRoom) {
-        await State.setMode(activeRoom.id, 'AUTO');
-        Utils.showToast(`Resumed AUTO mode in ${activeRoom.name}`, 'success');
+        await State.applyDashboardDecision();
+        Utils.showToast('Backend safety policy applied', 'success');
         return {
-          text: `I've resumed **AUTO Mode** for **${activeRoom.name}**. Breathe Clean is once again autonomously orchestrating devices based on live ambient particulate, CO₂, and outdoor air thresholds.`,
-          actionTag: 'Mode Changed',
-          actionDetails: `Set ${activeRoom.name} to AUTO`
+          text: `The backend evaluated current global sensor readings and applied its validated device decision. This is a one-time policy application; persistent AUTO mode is not available.`,
+          actionTag: 'Policy Applied',
+          actionDetails: `Validated backend decision for ${activeRoom.name}`
         };
       }
     }
@@ -122,13 +127,10 @@ const Chatbot = {
       if (activeRoom) {
         const winDev = activeRoom.devices.find(d => d.type === 'window');
         if (winDev) {
-          if (activeRoom.mode === 'AUTO') {
-            await State.setMode(activeRoom.id, 'MANUAL');
-          }
           await State.setDeviceStateManual(activeRoom.id, winDev.id, 'Open');
           Utils.showToast(`Smart Windows opened in ${activeRoom.name}`, 'success');
           return {
-            text: `Opened the **Smart Windows** in **${activeRoom.name}**. Switched to Manual mode to preserve your manual window position.`,
+            text: `The backend accepted the safe request to open the **Smart Windows** in **${activeRoom.name}**.`,
             actionTag: 'Device Actuated',
             actionDetails: `Smart Windows → Open (${activeRoom.name})`
           };
@@ -140,9 +142,6 @@ const Chatbot = {
       if (activeRoom) {
         const winDev = activeRoom.devices.find(d => d.type === 'window');
         if (winDev) {
-          if (activeRoom.mode === 'AUTO') {
-            await State.setMode(activeRoom.id, 'MANUAL');
-          }
           await State.setDeviceStateManual(activeRoom.id, winDev.id, 'Closed');
           Utils.showToast(`Smart Windows closed in ${activeRoom.name}`, 'info');
           return {
@@ -167,13 +166,10 @@ const Chatbot = {
           else if (q.includes('low') || q.includes('quiet') || q.includes('whisper') || q.includes('standby')) targetState = 'Low';
           else if (q.includes('medium') || q.includes('normal') || q.includes('active') || q.includes('turn on')) targetState = 'Active';
 
-          if (activeRoom.mode === 'AUTO') {
-            await State.setMode(activeRoom.id, 'MANUAL');
-          }
           await State.setDeviceStateManual(activeRoom.id, purDev.id, targetState);
           Utils.showToast(`Air Purifier set to ${targetState}`, 'success');
           return {
-            text: `Air Purifier in **${activeRoom.name}** has been set to **${targetState}**. Switched to Manual mode so the fan speed remains locked to your preference.`,
+            text: `The backend accepted the safe Air Purifier ${targetState === 'Off' ? 'OFF' : 'ON'} request for **${activeRoom.name}**.`,
             actionTag: 'Device Actuated',
             actionDetails: `Air Purifier → ${targetState} (${activeRoom.name})`
           };
@@ -194,13 +190,10 @@ const Chatbot = {
           else if (q.includes('low') || q.includes('quiet') || q.includes('eco')) targetState = 'Low';
           else if (q.includes('normal') || q.includes('standard')) targetState = 'Normal';
 
-          if (activeRoom.mode === 'AUTO') {
-            await State.setMode(activeRoom.id, 'MANUAL');
-          }
           await State.setDeviceStateManual(activeRoom.id, ventDev.id, targetState);
           Utils.showToast(`Ventilation set to ${targetState}`, 'success');
           return {
-            text: `Ventilation system in **${activeRoom.name}** modulated to **${targetState}**. Recirculation dampers and fan velocity updated.`,
+            text: `The backend accepted the safe Ventilation setting **${targetState}** for **${activeRoom.name}**.`,
             actionTag: 'Device Actuated',
             actionDetails: `Ventilation → ${targetState} (${activeRoom.name})`
           };
@@ -300,48 +293,36 @@ const Chatbot = {
     // -------------------------------------------------------------
     if (q.includes('smog') || q.includes('pollution spike') || q.includes('outdoor pollution') || q.includes('bad outdoor air')) {
       if (activeRoom) {
-        await State.updateEnvironment(activeRoom.id, {
-          outdoorAQI: 175,
-          indoorAQI: 55,
-          co2: 680
-        });
-        Utils.showToast('Outdoor Smog scenario triggered (AQI 175)', 'warning');
+        await State.applyDashboardScenario('pollution');
+        Utils.showToast('Backend outdoor-pollution scenario applied', 'warning');
         return {
-          text: `Simulated **Severe Outdoor Smog** scenario for **${activeRoom.name}**.\n- Outdoor AQI: **175** (Poor)\n- Autonomous decision: Smart windows sealed, MERV ventilation filtered, and HEPA purifier boosted to High CADR.`,
+          text: `Applied the backend **Outdoor Pollution** scenario. The decision was validated and applied against the backend sensor rules. Scenario readings are global, not room-specific.`,
           actionTag: 'Simulation Updated',
-          actionDetails: `Outdoor AQI → 175 (Smog Trigger)`
+          actionDetails: 'Scenario: pollution'
         };
       }
     }
 
     if (q.includes('fresh morning') || q.includes('fresh air') || q.includes('clean outdoor')) {
       if (activeRoom) {
-        await State.updateEnvironment(activeRoom.id, {
-          outdoorAQI: 24,
-          indoorAQI: 28,
-          co2: 510,
-          temperature: 22
-        });
-        Utils.showToast('Clean morning scenario applied', 'success');
+        await State.applyDashboardScenario('clean-air');
+        Utils.showToast('Backend clean-air scenario applied', 'success');
         return {
-          text: `Simulated **Pristine Morning Air** scenario for **${activeRoom.name}**.\n- Outdoor AQI: **24** (Good)\n- Autonomous decision: Natural cross-ventilation activated with open windows, purifier in eco standby.`,
+          text: `Applied the backend **Clean Air** scenario and its validated device decision. Scenario readings are global, not room-specific.`,
           actionTag: 'Simulation Updated',
-          actionDetails: `Outdoor AQI → 24 (Pristine Fresh)`
+          actionDetails: 'Scenario: clean-air'
         };
       }
     }
 
     if (q.includes('crowded') || q.includes('meeting') || q.includes('high co2') || q.includes('stuffy')) {
       if (activeRoom) {
-        await State.updateEnvironment(activeRoom.id, {
-          co2: 1420,
-          occupancy: 8
-        });
-        Utils.showToast('Crowded meeting scenario applied', 'info');
+        await State.applyDashboardScenario('high-co2');
+        Utils.showToast('Backend high-CO₂ scenario applied', 'info');
         return {
-          text: `Simulated **Crowded Gathering** scenario for **${activeRoom.name}**.\n- CO₂: **1,420 ppm** (Elevated), Occupancy: **8 persons**\n- Autonomous decision: Ventilation increased to purge indoor stuffiness and restore oxygenation.`,
+          text: `Applied the backend **High CO₂** scenario and its validated device decision. Scenario readings are global, not room-specific.`,
           actionTag: 'Simulation Updated',
-          actionDetails: `CO₂ → 1,420 ppm (Crowded)`
+          actionDetails: 'Scenario: high-co2'
         };
       }
     }
@@ -387,11 +368,11 @@ const Chatbot = {
     }
 
     if (envUpdated && activeRoom) {
-      await State.updateEnvironment(activeRoom.id, envUpdates);
+      await State.updateDashboardSensors(envUpdates);
       const parts = Object.entries(envUpdates).map(([k, v]) => `${k}: ${v}`).join(', ');
-      Utils.showToast(`Updated environment: ${parts}`, 'info');
+      Utils.showToast(`Backend sensor readings updated and policy applied: ${parts}`, 'info');
       return {
-        text: `Updated environmental parameters for **${activeRoom.name}**: ${parts}. The Autonomous Decision Engine has re-evaluated device states.`,
+        text: `Updated backend sensor readings: ${parts}. The backend safety policy was applied. Sensor readings are global, not room-specific.`,
         actionTag: 'Environment Updated',
         actionDetails: parts
       };
