@@ -393,9 +393,6 @@ const Views = {
               <button class="card-btn card-btn-primary" id="btn-force-reevaluate" title="Force instant ASHRAE 62.1 decision re-evaluation">
                 ${Utils.icons.zap} <span>Re-Evaluate</span>
               </button>
-              <button class="card-btn card-btn-outline" id="btn-toggle-override" title="Switch between Auto and Manual Override">
-                ${Utils.icons.sliders} <span>Override</span>
-              </button>
               <button class="card-btn card-btn-outline" id="btn-view-standard-modal" title="View standard compliance formulas">
                 ${Utils.icons.shieldCheck} <span>Standards</span>
               </button>
