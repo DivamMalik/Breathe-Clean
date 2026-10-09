@@ -9,9 +9,22 @@ const {
 const { saveAppliedDecision } = require("../data/database");
 const { generateDecision } = require("../services/decisionEngine");
 const { validateDecision } = require("../services/safetyValidator");
+const {
+  getUserEnvironmentState,
+  saveUserEnvironmentState
+} = require("../data/database");
 
-function getDecision(_request, response) {
-  const decision = generateDecision(getSensorData());
+function getDecision(request, response) {
+  const sensorData = request.user
+    ? getUserEnvironmentState(request.user.id)?.sensorData
+    : getSensorData();
+  if (!sensorData) {
+    return response.status(409).json({
+      success: false,
+      error: "No sensor readings are configured for this account yet"
+    });
+  }
+  const decision = generateDecision(sensorData);
   response.json({ success: true, decision });
 }
 
@@ -30,7 +43,20 @@ function evaluateDecision(request, response) {
 
 function applyDecision(request, response) {
   const decision = request.body;
-  const validation = validateDecision(decision, getSensorData());
+  const accountState = request.user
+    ? getUserEnvironmentState(request.user.id)
+    : null;
+  const sensorData = request.user
+    ? accountState?.sensorData
+    : getSensorData();
+  if (!sensorData) {
+    return response.status(409).json({
+      success: false,
+      applied: false,
+      error: "Configure sensor readings before applying a decision"
+    });
+  }
+  const validation = validateDecision(decision, sensorData);
 
   if (!validation.valid) {
     return response.status(400).json({
@@ -40,7 +66,6 @@ function applyDecision(request, response) {
     });
   }
 
-  const sensorData = getSensorData();
   const deviceUpdates = {
     windows: decision.windows,
     purifier: decision.purifier,
@@ -53,6 +78,21 @@ function applyDecision(request, response) {
       success: false,
       applied: false,
       error: deviceValidation.error
+    });
+  }
+
+  if (request.user) {
+    const current = accountState.deviceState || {};
+    const deviceState = { ...current, ...deviceUpdates };
+    saveUserEnvironmentState(request.user.id, {
+      deviceState,
+      decision
+    });
+    return response.json({
+      success: true,
+      applied: true,
+      deviceState,
+      reason: decision.reason
     });
   }
 

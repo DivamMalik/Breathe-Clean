@@ -55,8 +55,35 @@ database.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     email TEXT NOT NULL COLLATE NOCASE UNIQUE,
+    name TEXT,
     password_hash TEXT NOT NULL,
     created_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS user_setups (
+    user_id INTEGER PRIMARY KEY,
+    setup_json TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS user_environment_state (
+    user_id INTEGER PRIMARY KEY,
+    sensor_json TEXT,
+    device_json TEXT,
+    decision_json TEXT,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS user_aqi_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    indoor_aqi REAL NOT NULL,
+    outdoor_aqi REAL NOT NULL,
+    co2 REAL NOT NULL,
+    recorded_at TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
 
   CREATE TABLE IF NOT EXISTS password_reset_tokens (
@@ -80,27 +107,140 @@ database.exec(`
   ON user_sessions (expires_at);
 `);
 
+const userColumns = database.prepare("PRAGMA table_info(users)").all();
+if (!userColumns.some((column) => column.name === "name")) {
+  database.exec("ALTER TABLE users ADD COLUMN name TEXT");
+}
+
 const insertUser = database.prepare(`
-  INSERT INTO users (email, password_hash, created_at)
-  VALUES (@email, @password_hash, @created_at)
+  INSERT INTO users (email, name, password_hash, created_at)
+  VALUES (@email, @name, @password_hash, @created_at)
+`);
+const insertUserSetup = database.prepare(`
+  INSERT INTO user_setups (user_id, setup_json, updated_at)
+  VALUES (@user_id, @setup_json, @updated_at)
+`);
+const selectUserSetup = database.prepare(`
+  SELECT setup_json AS setupJson, updated_at AS updatedAt
+  FROM user_setups
+  WHERE user_id = @user_id
+`);
+const upsertUserSetup = database.prepare(`
+  INSERT INTO user_setups (user_id, setup_json, updated_at)
+  VALUES (@user_id, @setup_json, @updated_at)
+  ON CONFLICT(user_id) DO UPDATE SET
+    setup_json = excluded.setup_json,
+    updated_at = excluded.updated_at
+`);
+const insertUserEnvironmentState = database.prepare(`
+  INSERT INTO user_environment_state (user_id, sensor_json, device_json, decision_json, updated_at)
+  VALUES (@user_id, NULL, NULL, NULL, @updated_at)
+`);
+const selectUserEnvironmentState = database.prepare(`
+  SELECT sensor_json AS sensorJson, device_json AS deviceJson,
+    decision_json AS decisionJson, updated_at AS updatedAt
+  FROM user_environment_state
+  WHERE user_id = @user_id
+`);
+const updateUserEnvironmentState = database.prepare(`
+  UPDATE user_environment_state
+  SET sensor_json = COALESCE(@sensor_json, sensor_json),
+      device_json = COALESCE(@device_json, device_json),
+      decision_json = COALESCE(@decision_json, decision_json),
+      updated_at = @updated_at
+  WHERE user_id = @user_id
+`);
+const insertUserAqiHistory = database.prepare(`
+  INSERT INTO user_aqi_history (user_id, indoor_aqi, outdoor_aqi, co2, recorded_at)
+  VALUES (@user_id, @indoor_aqi, @outdoor_aqi, @co2, @recorded_at)
 `);
 const selectUserByEmail = database.prepare(`
-  SELECT id, email, password_hash, created_at AS createdAt
+  SELECT id, email, name, password_hash, created_at AS createdAt
   FROM users
   WHERE email = @email
 `);
 const selectUserById = database.prepare(`
-  SELECT id, email, created_at AS createdAt
+  SELECT id, email, name, created_at AS createdAt
   FROM users
   WHERE id = @id
 `);
 
-function createUser(email, passwordHash) {
-  return insertUser.run({
+const createUserTransaction = database.transaction((email, name, passwordHash) => {
+  const createdAt = new Date().toISOString();
+  const result = insertUser.run({
     email,
+    name,
     password_hash: passwordHash,
-    created_at: new Date().toISOString()
+    created_at: createdAt
   });
+  const userId = Number(result.lastInsertRowid);
+  insertUserSetup.run({
+    user_id: userId,
+    setup_json: JSON.stringify({
+      setupCompleted: false,
+      rooms: [],
+      devices: { window: false, ventilation: false, purifier: false },
+      preferences: null,
+      location: null,
+      outdoorAirQuality: null
+    }),
+    updated_at: createdAt
+  });
+  insertUserEnvironmentState.run({
+    user_id: userId,
+    updated_at: createdAt
+  });
+  return result;
+});
+
+function createUser(email, passwordHash, name = null) {
+  return createUserTransaction(email, name, passwordHash);
+}
+
+function getUserSetup(userId) {
+  const row = selectUserSetup.get({ user_id: userId });
+  return row ? { ...row, setup: JSON.parse(row.setupJson) } : null;
+}
+
+function saveUserSetup(userId, setup) {
+  upsertUserSetup.run({
+    user_id: userId,
+    setup_json: JSON.stringify(setup),
+    updated_at: new Date().toISOString()
+  });
+  return getUserSetup(userId);
+}
+
+function getUserEnvironmentState(userId) {
+  const row = selectUserEnvironmentState.get({ user_id: userId });
+  if (!row) return null;
+  return {
+    sensorData: row.sensorJson ? JSON.parse(row.sensorJson) : null,
+    deviceState: row.deviceJson ? JSON.parse(row.deviceJson) : null,
+    decision: row.decisionJson ? JSON.parse(row.decisionJson) : null,
+    updatedAt: row.updatedAt
+  };
+}
+
+function saveUserEnvironmentState(userId, { sensorData, deviceState, decision } = {}) {
+  const recordedAt = new Date().toISOString();
+  updateUserEnvironmentState.run({
+    user_id: userId,
+    sensor_json: sensorData === undefined ? null : JSON.stringify(sensorData),
+    device_json: deviceState === undefined ? null : JSON.stringify(deviceState),
+    decision_json: decision === undefined ? null : JSON.stringify(decision),
+    updated_at: recordedAt
+  });
+  if (sensorData) {
+    insertUserAqiHistory.run({
+      user_id: userId,
+      indoor_aqi: sensorData.indoorAQI,
+      outdoor_aqi: sensorData.outdoorAQI,
+      co2: sensorData.co2,
+      recorded_at: recordedAt
+    });
+  }
+  return getUserEnvironmentState(userId);
 }
 
 function getUserByEmail(email) {
@@ -280,9 +420,13 @@ module.exports = {
   createPasswordResetToken,
   getPublicUserById,
   getUserByEmail,
+  getUserEnvironmentState,
+  getUserSetup,
   getLatestAppliedDeviceState,
   getLatestSensorReading,
   resetPasswordWithToken,
   saveAppliedDecision,
+  saveUserSetup,
+  saveUserEnvironmentState,
   saveSensorReading
 };

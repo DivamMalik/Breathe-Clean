@@ -26,4 +26,24 @@ function requireAuthenticatedUser(request, response, next) {
   return next();
 }
 
-module.exports = { requireAuthenticatedUser };
+function resolveOptionalAuthenticatedUser(request, response, next) {
+  const userId = request.session?.userId;
+  if (userId === undefined) return next();
+  if (!Number.isSafeInteger(userId)) {
+    return response.status(401).json({
+      success: false,
+      error: "Authentication required"
+    });
+  }
+  const user = getPublicUserById(userId);
+  if (!user) {
+    return response.status(401).json({
+      success: false,
+      error: "Authentication required"
+    });
+  }
+  request.user = user;
+  return next();
+}
+
+module.exports = { requireAuthenticatedUser, resolveOptionalAuthenticatedUser };

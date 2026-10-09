@@ -95,6 +95,15 @@ const State = {
   evaluateActiveRoom(logChanges = true) {
     const room = this.getActiveRoom();
     if (!room) return null;
+    const requiredSensorFields = [
+      'outdoorAQI', 'indoorAQI', 'co2', 'temperature', 'humidity', 'occupancy'
+    ];
+    if (
+      !room.environment ||
+      requiredSensorFields.some(field => !Number.isFinite(room.environment[field]))
+    ) {
+      return null;
+    }
 
     const decision = Engine.decide(room.environment, room, room.devices);
     this.decision = decision;
@@ -153,6 +162,15 @@ const State = {
     if (!roomId) roomId = this.activeRoomId;
     const room = this.getRoom(roomId);
     if (!room) return null;
+    const requiredSensorFields = [
+      'outdoorAQI', 'indoorAQI', 'co2', 'temperature', 'humidity', 'occupancy'
+    ];
+    if (
+      !room.environment ||
+      requiredSensorFields.some(field => !Number.isFinite(room.environment[field]))
+    ) {
+      return null;
+    }
 
     const decision = Engine.decide(room.environment, room, room.devices);
     room.decision = decision;
@@ -399,16 +417,33 @@ const State = {
   },
 
   async addRoom(roomData) {
+    const previousRooms = this.rooms;
     const newRoom = await API.createRoom(roomData);
     this.rooms = API.getRooms();
-    this.setActiveRoom(newRoom.id);
+    try {
+      await API.persistRoomsToAccountSetup();
+    } catch (error) {
+      API.saveRooms(previousRooms);
+      this.rooms = previousRooms;
+      throw error;
+    }
+    this.activeRoomId = newRoom.id;
+    API.setActiveRoomId(newRoom.id);
     this.notify('room_created', newRoom);
     return newRoom;
   },
 
   async updateRoom(roomId, updates) {
+    const previousRooms = this.rooms;
     const updated = await API.updateRoom(roomId, updates);
     this.rooms = API.getRooms();
+    try {
+      await API.persistRoomsToAccountSetup();
+    } catch (error) {
+      API.saveRooms(previousRooms);
+      this.rooms = previousRooms;
+      throw error;
+    }
     this.notify('room_updated', updated);
     return updated;
   },
@@ -417,8 +452,16 @@ const State = {
     if (this.rooms.length <= 1) {
       throw new Error('At least one space must remain active.');
     }
+    const previousRooms = this.rooms;
     await API.deleteRoom(roomId);
     this.rooms = API.getRooms();
+    try {
+      await API.persistRoomsToAccountSetup();
+    } catch (error) {
+      API.saveRooms(previousRooms);
+      this.rooms = previousRooms;
+      throw error;
+    }
     if (this.activeRoomId === roomId) {
       this.activeRoomId = this.rooms[0].id;
       API.setActiveRoomId(this.activeRoomId);
@@ -428,8 +471,16 @@ const State = {
   },
 
   async duplicateRoom(roomId) {
+    const previousRooms = this.rooms;
     const duplicated = await API.duplicateRoom(roomId);
     this.rooms = API.getRooms();
+    try {
+      await API.persistRoomsToAccountSetup();
+    } catch (error) {
+      API.saveRooms(previousRooms);
+      this.rooms = previousRooms;
+      throw error;
+    }
     this.notify('room_created', duplicated);
     return duplicated;
   },

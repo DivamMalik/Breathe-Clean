@@ -44,9 +44,14 @@ function createSignupHarness({ signup, password = "correct-password" }) {
         signupCalls += 1;
         return signup(...args);
       },
-      updateUser() {}
+      updateUser() {},
+      getSettings: () => ({ tempUnit: "celsius", notificationsEnabled: true }),
+      getCachedAccountSetup: () => null,
+      getActiveRoomId: () => null,
+      getRooms: () => []
     },
-    State: { user: null },
+    State: { user: null, rooms: [] },
+    Chatbot: { setAccount() {}, clearHistory() {} },
     Views: { renderOnboarding: () => "setup-mode" },
     Utils: {},
     document,

@@ -1,12 +1,37 @@
 /* Breathe Clean - AI Assistant & Autonomous Control Co-Pilot */
 
+function hasCompleteChatSensorReadings(environment) {
+  return Boolean(
+    environment &&
+    ['indoorAQI', 'outdoorAQI', 'co2', 'temperature', 'humidity', 'occupancy']
+      .every(field => Number.isFinite(environment[field]))
+  );
+}
+
 const Chatbot = {
   storageKey: 'breatheclean_chat_history',
+  accountId: null,
   messages: [],
   listeners: [],
 
   init() {
-    const raw = localStorage.getItem(this.storageKey);
+    const user = API.getCurrentUser();
+    this.setAccount(user?.id ?? null);
+  },
+
+  setAccount(accountId) {
+    const nextAccountId = accountId === null || accountId === undefined
+      ? null
+      : String(accountId);
+    if (this.accountId && this.accountId !== nextAccountId) {
+      localStorage.removeItem(`${this.storageKey}:${encodeURIComponent(this.accountId)}`);
+    }
+    this.accountId = nextAccountId;
+    this.messages = [];
+    const storageKey = this.accountId
+      ? `${this.storageKey}:${encodeURIComponent(this.accountId)}`
+      : null;
+    const raw = storageKey ? localStorage.getItem(storageKey) : null;
     if (raw) {
       try {
         this.messages = JSON.parse(raw);
@@ -19,13 +44,14 @@ const Chatbot = {
         {
           id: 'msg_welcome',
           sender: 'bot',
-          text: `Hello! I am your **Breathe Clean Assistant**. I can monitor indoor environmental conditions, explain autonomous decisions, and directly control all functions across your spaces, devices, simulation, and settings.\n\nTry asking me to:\n- *"Turn air purifier to High"*\n- *"Switch Bedroom to Manual mode"*\n- *"Why are the windows closed?"*\n- *"Simulate outdoor smog spike (AQI 180)"*\n- *"Switch to Living Room"*`,
+          text: `Hello! I am your **Breathe Clean Assistant**. I can explain available account readings and safety decisions, help navigate the app, and report when data or controls are unavailable.`,
           timestamp: new Date().toISOString(),
           actionTag: null
         }
       ];
-      this.save();
+      if (this.accountId) this.save();
     }
+    this.notify();
   },
 
   subscribe(listener) {
@@ -42,13 +68,18 @@ const Chatbot = {
   },
 
   save() {
-    localStorage.setItem(this.storageKey, JSON.stringify(this.messages));
+    if (this.accountId) {
+      const storageKey = `${this.storageKey}:${encodeURIComponent(this.accountId)}`;
+      localStorage.setItem(storageKey, JSON.stringify(this.messages));
+    }
     this.notify();
   },
 
   clearHistory() {
     this.messages = [];
-    localStorage.removeItem(this.storageKey);
+    if (this.accountId) {
+      localStorage.removeItem(`${this.storageKey}:${encodeURIComponent(this.accountId)}`);
+    }
     this.init();
     this.notify();
   },
@@ -241,8 +272,9 @@ const Chatbot = {
       if (q.includes(`switch to ${roomLower}`) || q.includes(`go to ${roomLower}`) || q.includes(`open ${roomLower}`) || q.includes(`select ${roomLower}`)) {
         State.setActiveRoom(room.id);
         Utils.showToast(`Active space changed to ${room.name}`, 'info');
+        const environment = room.environment || {};
         return {
-          text: `Switched active space to **${room.name}** (${room.type}, ${room.area} m²). Current operating mode: **${room.mode}**. Indoor AQI: **${room.environment.indoorAQI}**, CO₂: **${room.environment.co2} ppm**.`,
+          text: `Switched active space to **${room.name}** (${room.type}, ${room.area} m²). Current operating mode: **${room.mode}**. Indoor AQI: **${Number.isFinite(environment.indoorAQI) ? environment.indoorAQI : 'Unavailable'}**, CO₂: **${Number.isFinite(environment.co2) ? `${environment.co2} ppm` : 'Unavailable'}**.`,
           actionTag: 'Space Selected',
           actionDetails: `Active room: ${room.name}`
         };
@@ -430,15 +462,10 @@ const Chatbot = {
     }
 
     if (q.includes('reset demo') || q.includes('factory reset') || q.includes('reset data')) {
-      localStorage.clear();
-      sessionStorage.clear();
-      State.init();
-      this.clearHistory();
-      Utils.showToast('Data reset to defaults', 'success');
       return {
-        text: `Reset all demo spaces, mock telemetry, and device histories to initial factory defaults.`,
-        actionTag: 'Data Reset',
-        actionDetails: `Factory Defaults Restored`
+        text: `Account data cannot be reset through the assistant. Your saved account setup and data were not changed.`,
+        actionTag: 'No Changes Made',
+        actionDetails: `Account data reset is unavailable`
       };
     }
 
@@ -447,6 +474,9 @@ const Chatbot = {
     // -------------------------------------------------------------
     if (q.includes('why') && (q.includes('window') || q.includes('decision') || q.includes('purifier') || q.includes('closed') || q.includes('open'))) {
       if (activeRoom) {
+        if (!hasCompleteChatSensorReadings(activeRoom.environment)) {
+          return { text: `No complete sensor readings are available for ${activeRoom.name}; a current safety decision cannot be explained.` };
+        }
         const dec = activeRoom.decision || Engine.decide(activeRoom.environment, activeRoom, activeRoom.devices);
         return {
           text: `### System Decision Explanation for ${activeRoom.name}:\n\n**${dec.title}**\n\n- **Reason:** ${dec.reason}\n- **Device Action:** ${dec.action}\n- **Expected Outcome:** ${dec.expectedOutcome}\n\n*Current Conditions: Outdoor AQI ${activeRoom.environment.outdoorAQI}, Indoor AQI ${activeRoom.environment.indoorAQI}, CO₂ ${activeRoom.environment.co2} ppm.*`
@@ -459,13 +489,16 @@ const Chatbot = {
     // -------------------------------------------------------------
     if (q.includes('status') || q.includes('air quality') || q.includes('how is the air') || q.includes('report') || q.includes('summary')) {
       if (activeRoom) {
-        const env = activeRoom.environment;
+        const env = activeRoom.environment || {};
+        if (!hasCompleteChatSensorReadings(env)) {
+          return { text: `Account telemetry for ${activeRoom.name} is unavailable. No sensor readings have been configured.` };
+        }
         const outStat = Utils.getAqiStatus(env.outdoorAQI);
         const inStat = Utils.getAqiStatus(env.indoorAQI);
         const co2Stat = Utils.getCo2Status(env.co2);
 
         return {
-          text: `### Environmental Telemetry for ${activeRoom.name}\n\n- **Outdoor AQI:** ${env.outdoorAQI} (${outStat.label})\n- **Indoor AQI:** ${env.indoorAQI} (${inStat.label})\n- **CO₂:** ${env.co2} ppm (${co2Stat.label})\n- **Temperature:** ${env.temperature}°C\n- **Humidity:** ${env.humidity}%\n- **Occupancy:** ${env.occupancy} person${env.occupancy > 1 ? 's' : ''}\n- **Operating Mode:** ${activeRoom.mode}\n\nAll actuators are currently synchronized with the central decision engine.`
+          text: `### Environmental Telemetry for ${activeRoom.name}\n\n- **Outdoor AQI:** ${env.outdoorAQI} (${outStat.label})\n- **Indoor AQI:** ${env.indoorAQI} (${inStat.label})\n- **CO₂:** ${env.co2} ppm (${co2Stat.label})\n- **Temperature:** ${env.temperature}°C\n- **Humidity:** ${env.humidity}%\n- **Occupancy:** ${env.occupancy} person${env.occupancy > 1 ? 's' : ''}\n- **Operating Mode:** ${activeRoom.mode}`
         };
       }
     }

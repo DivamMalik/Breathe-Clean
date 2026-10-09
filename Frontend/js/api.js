@@ -4,237 +4,322 @@ const STORAGE_KEYS = {
   USER: 'breatheclean_user',
   ROOMS: 'breatheclean_rooms',
   ACTIVE_ROOM_ID: 'breatheclean_active_room',
-  SETTINGS: 'breatheclean_settings'
+  SETTINGS: 'breatheclean_settings',
+  SETUP: 'breatheclean_setup',
+  LEGACY_OWNER: 'breatheclean_legacy_setup_owner'
 };
 
 const API_BASE_URL = (window.BREATHE_CLEAN_API_BASE || 'http://localhost:5001/api')
   .replace(/\/+$/, '');
 
-const DEFAULT_ROOMS = [
-  {
-    id: 'room_bedroom',
-    name: 'Bedroom',
-    type: 'Bedroom',
-    image: 'assets/images/room-bedroom.jpg',
-    length: 4.5,
-    width: 3.0,
-    area: 13.5,
-    ceilingHeight: 2.8,
-    windowsCount: 1,
-    doorsCount: 1,
-    typicalOccupants: 2,
-    mode: 'AUTO',
-    environment: {
-      outdoorAQI: 112,
-      indoorAQI: 38,
-      co2: 640,
-      temperature: 24,
-      humidity: 51,
-      occupancy: 2,
-      timestamp: new Date().toISOString()
-    },
-    devices: [
-      {
-        id: 'dev_bed_win',
-        type: 'window',
-        name: 'Smart Windows',
-        state: 'Closed',
-        connectionState: 'Connected',
-        lastUpdated: new Date(Date.now() - 1000 * 60 * 3).toISOString()
-      },
-      {
-        id: 'dev_bed_vent',
-        type: 'ventilation',
-        name: 'Ventilation',
-        state: 'Normal',
-        connectionState: 'Connected',
-        lastUpdated: new Date(Date.now() - 1000 * 60 * 10).toISOString()
-      },
-      {
-        id: 'dev_bed_pur',
-        type: 'purifier',
-        name: 'Air Purifier',
-        state: 'Active',
-        connectionState: 'Connected',
-        lastUpdated: new Date(Date.now() - 1000 * 25).toISOString()
-      }
-    ],
-    activity: [
-      {
-        id: 'act_1',
-        source: 'SYSTEM',
-        action: 'Windows remain closed',
-        detail: 'Outdoor AQI increased to 112.',
-        timestamp: new Date(Date.now() - 1000 * 60 * 3).toISOString()
-      },
-      {
-        id: 'act_2',
-        source: 'SYSTEM',
-        action: 'Purifier turned to normal mode',
-        detail: 'Indoor AQI improved to 38.',
-        timestamp: new Date(Date.now() - 1000 * 60 * 6).toISOString()
-      },
-      {
-        id: 'act_3',
-        source: 'SYSTEM',
-        action: 'Ventilation running at normal rate',
-        detail: 'Maintaining fresh air circulation.',
-        timestamp: new Date(Date.now() - 1000 * 60 * 10).toISOString()
-      },
-      {
-        id: 'act_4',
-        source: 'YOU',
-        action: 'Switched to Auto mode',
-        detail: 'Breathe Clean resumed control.',
-        timestamp: new Date(Date.now() - 1000 * 60 * 13).toISOString()
-      },
-      {
-        id: 'act_5',
-        source: 'SYSTEM',
-        action: 'Indoor CO₂ stable',
-        detail: 'Current level: 640 ppm.',
-        timestamp: new Date(Date.now() - 1000 * 60 * 16).toISOString()
-      }
-    ]
-  },
-  {
-    id: 'room_living',
-    name: 'Living Room',
-    type: 'Living Room',
-    image: 'assets/images/room-livingroom.jpg',
-    length: 6.2,
-    width: 4.1,
-    area: 25.4,
-    ceilingHeight: 3.0,
-    windowsCount: 2,
-    doorsCount: 2,
-    typicalOccupants: 4,
-    mode: 'AUTO',
-    environment: {
-      outdoorAQI: 112,
-      indoorAQI: 46,
-      co2: 720,
-      temperature: 23,
-      humidity: 48,
-      occupancy: 3,
-      timestamp: new Date().toISOString()
-    },
-    devices: [
-      {
-        id: 'dev_liv_win',
-        type: 'window',
-        name: 'Smart Windows',
-        state: 'Closed',
-        connectionState: 'Connected',
-        lastUpdated: new Date(Date.now() - 1000 * 60 * 15).toISOString()
-      },
-      {
-        id: 'dev_liv_vent',
-        type: 'ventilation',
-        name: 'Ventilation',
-        state: 'Normal',
-        connectionState: 'Connected',
-        lastUpdated: new Date(Date.now() - 1000 * 60 * 15).toISOString()
-      },
-      {
-        id: 'dev_liv_pur',
-        type: 'purifier',
-        name: 'Air Purifier',
-        state: 'Active',
-        connectionState: 'Connected',
-        lastUpdated: new Date(Date.now() - 1000 * 60 * 5).toISOString()
-      }
-    ],
-    activity: [
-      {
-        id: 'act_liv_1',
-        source: 'SYSTEM',
-        action: 'Ventilation balanced',
-        detail: 'Living room occupancy at 3 persons.',
-        timestamp: new Date(Date.now() - 1000 * 60 * 20).toISOString()
-      }
-    ]
-  },
-  {
-    id: 'room_study',
-    name: 'Study',
-    type: 'Study',
-    image: 'assets/images/room-study.jpg',
-    length: 3.5,
-    width: 2.8,
-    area: 9.8,
-    ceilingHeight: 2.7,
-    windowsCount: 1,
-    doorsCount: 1,
-    typicalOccupants: 1,
-    mode: 'AUTO',
-    environment: {
-      outdoorAQI: 112,
-      indoorAQI: 32,
-      co2: 590,
-      temperature: 22,
-      humidity: 50,
-      occupancy: 1,
-      timestamp: new Date().toISOString()
-    },
-    devices: [
-      {
-        id: 'dev_stu_win',
-        type: 'window',
-        name: 'Smart Windows',
-        state: 'Closed',
-        connectionState: 'Connected',
-        lastUpdated: new Date(Date.now() - 1000 * 60 * 30).toISOString()
-      },
-      {
-        id: 'dev_stu_vent',
-        type: 'ventilation',
-        name: 'Ventilation',
-        state: 'Low',
-        connectionState: 'Connected',
-        lastUpdated: new Date(Date.now() - 1000 * 60 * 30).toISOString()
-      },
-      {
-        id: 'dev_stu_pur',
-        type: 'purifier',
-        name: 'Air Purifier',
-        state: 'Standby',
-        connectionState: 'Connected',
-        lastUpdated: new Date(Date.now() - 1000 * 60 * 30).toISOString()
-      }
-    ],
-    activity: [
-      {
-        id: 'act_stu_1',
-        source: 'SYSTEM',
-        action: 'Eco standby mode active',
-        detail: 'Air quality in study is optimal.',
-        timestamp: new Date(Date.now() - 1000 * 60 * 45).toISOString()
-      }
-    ]
-  }
-];
-
 const API = {
+  _userId() {
+    const raw = localStorage.getItem(STORAGE_KEYS.USER) || sessionStorage.getItem(STORAGE_KEYS.USER);
+    if (!raw || raw === 'signed_out') return null;
+    try {
+      const user = JSON.parse(raw);
+      return user && (typeof user.id === 'number' || typeof user.id === 'string')
+        ? String(user.id)
+        : null;
+    } catch {
+      return null;
+    }
+  },
+
+  _scopedKey(key, userId = this._userId()) {
+    return userId ? `${key}:${encodeURIComponent(userId)}` : null;
+  },
+
+  _getScopedItem(key, userId) {
+    const storageKey = this._scopedKey(key, userId);
+    return storageKey ? localStorage.getItem(storageKey) : null;
+  },
+
+  _setScopedItem(key, value, userId) {
+    const storageKey = this._scopedKey(key, userId);
+    if (storageKey) localStorage.setItem(storageKey, value);
+  },
+
+  _clearScopedData(userId) {
+    for (const key of [STORAGE_KEYS.ROOMS, STORAGE_KEYS.ACTIVE_ROOM_ID, STORAGE_KEYS.SETTINGS, STORAGE_KEYS.SETUP]) {
+      const scopedKey = this._scopedKey(key, userId);
+      if (scopedKey) localStorage.removeItem(scopedKey);
+    }
+  },
+
+  _clearLegacySetup() {
+    localStorage.removeItem(STORAGE_KEYS.ROOMS);
+    localStorage.removeItem(STORAGE_KEYS.ACTIVE_ROOM_ID);
+    localStorage.removeItem(STORAGE_KEYS.SETTINGS);
+  },
+
+  _storeUser(user, rememberMe = true) {
+    const serialized = JSON.stringify(user);
+    if (rememberMe) {
+      sessionStorage.removeItem(STORAGE_KEYS.USER);
+      localStorage.setItem(STORAGE_KEYS.USER, serialized);
+    } else {
+      localStorage.removeItem(STORAGE_KEYS.USER);
+      sessionStorage.setItem(STORAGE_KEYS.USER, serialized);
+    }
+  },
+
   // Simulates network latency if desired
   async _delay(ms = 40) {
     return new Promise(resolve => setTimeout(resolve, ms));
   },
 
   async _authRequest(endpoint, credentials) {
-    const response = await fetch(`${API_BASE_URL}/auth/${endpoint}`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(credentials)
-    });
-    const result = await response.json();
+    let response;
+    try {
+      response = await fetch(`${API_BASE_URL}/auth/${endpoint}`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(credentials)
+      });
+    } catch {
+      throw new Error('Unable to reach the Breathe Clean server. Check that it is running and try again.');
+    }
+    let result = null;
+    try {
+      result = await response.json();
+    } catch {
+      result = null;
+    }
 
     if (!response.ok) {
-      throw new Error(result.error || 'Authentication request failed');
+      if (response.status >= 500) {
+        const error = new Error(
+          result?.error || 'The server could not complete this request. Please try again shortly.'
+        );
+        error.accountCreated = result?.accountCreated === true;
+        error.status = response.status;
+        throw error;
+      }
+      const error = new Error(
+        result?.error ||
+        `Authentication endpoint returned HTTP ${response.status}. Check the backend route and configuration.`
+      );
+      error.status = response.status;
+      throw error;
+    }
+    if (!result || result.success !== true) {
+      throw new Error('The server returned an invalid authentication response.');
     }
 
     return result;
+  },
+
+  async _accountRequest(endpoint, method = 'GET', body) {
+    const response = await fetch(`${API_BASE_URL}/account/${endpoint}`, {
+      method,
+      credentials: 'include',
+      headers: {
+        Accept: 'application/json',
+        ...(body === undefined ? {} : { 'Content-Type': 'application/json' })
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) })
+    });
+    const result = await response.json();
+    if (!response.ok || result.success !== true) {
+      throw new Error(result.error || 'Unable to load your account setup');
+    }
+    return result;
+  },
+
+  async getAccountSetup() {
+    return this._accountRequest('setup');
+  },
+
+  async restoreAccountSetup() {
+    const user = this.getCurrentUser();
+    if (!user || !Number.isSafeInteger(user.id)) return user;
+    const rememberMe = Boolean(localStorage.getItem(STORAGE_KEYS.USER));
+    const setupResponse = await this.getAccountSetup();
+    const restoredUser = await this._hydrateAccount(user, setupResponse);
+    this._storeUser(restoredUser, rememberMe);
+    return restoredUser;
+  },
+
+  clearRememberedUser() {
+    const userId = this._userId();
+    if (
+      userId &&
+      !localStorage.getItem(STORAGE_KEYS.LEGACY_OWNER) &&
+      localStorage.getItem(STORAGE_KEYS.ROOMS)
+    ) {
+      localStorage.setItem(STORAGE_KEYS.LEGACY_OWNER, userId);
+    }
+    if (userId) this._clearScopedData(userId);
+    localStorage.removeItem(STORAGE_KEYS.USER);
+    sessionStorage.removeItem(STORAGE_KEYS.USER);
+  },
+
+  async saveAccountSetup(setup) {
+    const result = await this._accountRequest('setup', 'PUT', setup);
+    this._setScopedItem(STORAGE_KEYS.SETUP, JSON.stringify(result.setup));
+    this.saveRooms(result.setup.rooms);
+    if (result.setup.preferences) {
+      this.saveSettings({ ...this.getSettings(), ...result.setup.preferences });
+    }
+    return result;
+  },
+
+  async persistRoomsToAccountSetup() {
+    const cached = this.getCachedAccountSetup();
+    if (!cached) {
+      const response = await this.getAccountSetup();
+      const setup = response.setup || {
+        setupCompleted: false,
+        rooms: [],
+        devices: { window: false, ventilation: false, purifier: false },
+        preferences: null,
+        location: null,
+        outdoorAirQuality: null
+      };
+      return this.saveAccountSetup({
+        ...setup,
+        rooms: this.getRooms()
+      });
+    }
+    return this.saveAccountSetup({
+      ...cached,
+      rooms: this.getRooms()
+    });
+  },
+
+  getCachedAccountSetup() {
+    const raw = this._getScopedItem(STORAGE_KEYS.SETUP);
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  },
+
+  async searchIndianLocations(query) {
+    const result = await this._accountRequest('location-search', 'POST', { query });
+    return result.locations;
+  },
+
+  async reverseGeocodeLocation(latitude, longitude) {
+    const result = await this._accountRequest('location-reverse-geocode', 'POST', {
+      latitude,
+      longitude
+    });
+    return result.location;
+  },
+
+  async lookupOutdoorAirQuality() {
+    const result = await this._accountRequest('outdoor-air-quality', 'POST', {});
+    return result.airQuality;
+  },
+
+  async _hydrateAccount(user, setupResponse) {
+    const userId = String(user.id);
+    let setup = setupResponse.setup;
+    if (!setupResponse.hasSetup) {
+      const legacyOwner = localStorage.getItem(STORAGE_KEYS.LEGACY_OWNER);
+      const legacyRaw = localStorage.getItem(STORAGE_KEYS.ROOMS);
+      if (legacyOwner === userId && legacyRaw) {
+        let rooms = null;
+        try {
+          rooms = JSON.parse(legacyRaw);
+        } catch {
+          rooms = null;
+        }
+        if (Array.isArray(rooms)) {
+          rooms = rooms.filter(room =>
+            room && !['room_bedroom', 'room_living', 'room_study'].includes(room.id)
+          );
+        }
+        if (Array.isArray(rooms) && rooms.length > 0) {
+          let legacySettings = {};
+          const legacySettingsRaw = localStorage.getItem(STORAGE_KEYS.SETTINGS);
+          if (legacySettingsRaw) {
+            try {
+              legacySettings = JSON.parse(legacySettingsRaw);
+            } catch {
+              legacySettings = {};
+            }
+          }
+          const devices = {
+            window: rooms.some(room => room.devices?.some(device => device.type === 'window')),
+            ventilation: rooms.some(room => room.devices?.some(device => device.type === 'ventilation')),
+            purifier: rooms.some(room => room.devices?.some(device => device.type === 'purifier'))
+          };
+          setup = {
+            setupCompleted: false,
+            rooms,
+            devices,
+            preferences: {
+              tempUnit: ['celsius', 'fahrenheit'].includes(legacySettings.tempUnit)
+                ? legacySettings.tempUnit
+                : 'celsius',
+              notificationsEnabled: typeof legacySettings.notificationsEnabled === 'boolean'
+                ? legacySettings.notificationsEnabled
+                : true
+            },
+            location: null,
+            outdoorAirQuality: null
+          };
+          await this._accountRequest('setup', 'PUT', setup);
+          localStorage.setItem(STORAGE_KEYS.LEGACY_OWNER, userId);
+          this._clearLegacySetup();
+        } else {
+          this._clearLegacySetup();
+          localStorage.removeItem(STORAGE_KEYS.LEGACY_OWNER);
+        }
+      }
+    }
+
+    if (setup) {
+      this._setScopedItem(STORAGE_KEYS.SETUP, JSON.stringify(setup), userId);
+      this._setScopedItem(STORAGE_KEYS.ROOMS, JSON.stringify(setup.rooms || []), userId);
+      const scopedActiveRoomId = this._getScopedItem(STORAGE_KEYS.ACTIVE_ROOM_ID, userId);
+      if (!setup.rooms?.some(room => room.id === scopedActiveRoomId)) {
+        this._setScopedItem(
+          STORAGE_KEYS.ACTIVE_ROOM_ID,
+          setup.rooms?.[0]?.id || '',
+          userId
+        );
+      }
+      if (setup.preferences) {
+        this._setScopedItem(
+          STORAGE_KEYS.SETTINGS,
+          JSON.stringify({ ...this.getSettingsForUser(userId), ...setup.preferences }),
+          userId
+        );
+      }
+    } else {
+      this._setScopedItem(STORAGE_KEYS.ROOMS, '[]', userId);
+    }
+    return {
+      ...user,
+      isOnboarded: setup
+        ? setup.setupCompleted
+        : setupResponse.hasSetup
+          ? setupResponse.setupComplete
+          : true
+    };
+  },
+
+  getSettingsForUser(userId) {
+    const raw = this._getScopedItem(STORAGE_KEYS.SETTINGS, userId);
+    const defaults = {
+      tempUnit: 'celsius',
+      defaultMode: 'AUTO',
+      notificationsEnabled: true,
+      dataSharing: false
+    };
+    if (!raw) return defaults;
+    try {
+      return { ...defaults, ...JSON.parse(raw) };
+    } catch {
+      return defaults;
+    }
   },
 
   async _getDashboardResource(resource) {
@@ -306,19 +391,26 @@ const API = {
 
   async login(email, password, rememberMe = true) {
     if (!email || !password) throw new Error('Email and password are required');
+    const previousUserId = this._userId();
     const { user: authenticatedUser } = await this._authRequest('login', { email, password });
-    const user = {
+    if (previousUserId && previousUserId !== String(authenticatedUser.id)) {
+      if (
+        !localStorage.getItem(STORAGE_KEYS.LEGACY_OWNER) &&
+        localStorage.getItem(STORAGE_KEYS.ROOMS)
+      ) {
+        localStorage.setItem(STORAGE_KEYS.LEGACY_OWNER, previousUserId);
+      }
+      this._clearScopedData(previousUserId);
+    }
+    const provisionalUser = {
       ...authenticatedUser,
-      name: email.split('@')[0].replace('.', ' ').replace(/^./, str => str.toUpperCase()) || 'Divam',
-      isOnboarded: true,
+      name: authenticatedUser.name || '',
       lastLogin: new Date().toISOString()
     };
-    if (rememberMe) {
-      localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
-    } else {
-      localStorage.removeItem(STORAGE_KEYS.USER);
-      sessionStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
-    }
+    this._storeUser(provisionalUser, rememberMe);
+    const setupResponse = await this.getAccountSetup();
+    const user = await this._hydrateAccount(provisionalUser, setupResponse);
+    this._storeUser(user, rememberMe);
     return user;
   },
 
@@ -334,61 +426,68 @@ const API = {
     }
   },
 
-  async loginWithGoogleCredential(credential) {
-    await this._delay();
-    try {
-      const base64Url = credential.split('.')[1];
-      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-      const jsonPayload = decodeURIComponent(atob(base64).split('').map(c => {
-        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-      }).join(''));
-      const payload = JSON.parse(jsonPayload);
-
-      const user = {
-        id: 'usr_g_' + (payload.sub || Date.now()),
-        name: payload.name || payload.email.split('@')[0],
-        email: payload.email,
-        avatar: payload.picture || '',
-        authProvider: 'google',
-        isOnboarded: true,
-        lastLogin: new Date().toISOString()
-      };
-      localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
-      return user;
-    } catch (err) {
-      console.error('Failed to parse Google JWT credential:', err);
-      throw new Error('Google authentication credential validation failed.');
-    }
+  async loginWithGoogleCredential() {
+    throw new Error('Google sign-in is not connected to backend authentication.');
   },
 
-  async loginWithGoogle(customProfile = null) {
-    await this._delay();
-    const user = customProfile || {
-      id: 'usr_google_divam',
-      name: 'Divam Malik',
-      email: 'divam.malik@gmail.com',
-      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&h=120&q=80',
-      authProvider: 'google',
-      isOnboarded: true,
-      lastLogin: new Date().toISOString()
-    };
-    localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
-    return user;
+  async loginWithGoogle() {
+    throw new Error('Google sign-in is simulated and not connected to backend authentication.');
   },
 
   async signup(name, email, password) {
     if (!email || !password || !name) throw new Error('All fields are required');
-    const { user: registeredUser } = await this._authRequest('register', { email, password });
-    await this._authRequest('login', { email, password });
-    const user = {
-      ...registeredUser,
-      name: name.trim(),
-      email: registeredUser.email,
-      isOnboarded: false, // Triggers first-time onboarding
-      createdAt: new Date().toISOString()
-    };
-    localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
-    return user;
+    const previousUserId = this._userId();
+    let accountCreated = false;
+    try {
+      const { user: registeredUser } = await this._authRequest('register', {
+        name: name.trim(),
+        email,
+        password
+      });
+      accountCreated = true;
+      if (previousUserId && previousUserId !== String(registeredUser.id)) {
+        if (
+          !localStorage.getItem(STORAGE_KEYS.LEGACY_OWNER) &&
+          localStorage.getItem(STORAGE_KEYS.ROOMS)
+        ) {
+          localStorage.setItem(STORAGE_KEYS.LEGACY_OWNER, previousUserId);
+        }
+        this._clearScopedData(previousUserId);
+      }
+      const provisionalUser = {
+        ...registeredUser,
+        name: registeredUser.name || name.trim(),
+        lastLogin: new Date().toISOString(),
+        createdAt: new Date().toISOString()
+      };
+      this._storeUser(provisionalUser, true);
+      const setupResponse = await this.getAccountSetup();
+      const user = await this._hydrateAccount(provisionalUser, setupResponse);
+      const onboardedUser = {
+        ...user,
+        name: provisionalUser.name,
+        isOnboarded: false
+      };
+      this._storeUser(onboardedUser, true);
+      return onboardedUser;
+    } catch (error) {
+      if (accountCreated) {
+        throw new Error(
+          `Your account was created, but setup could not be loaded. Please sign in to retry setup: ${error.message}`
+        );
+      }
+      if (error.accountCreated) {
+        throw new Error(
+          'Your account was created, but sign-in could not be started. Please sign in with your new credentials.'
+        );
+      }
+      if (!error.status && /Unable to reach/.test(error.message)) {
+        throw new Error(
+          'We could not confirm whether your account was created because the server connection was lost. Try signing in before attempting registration again.'
+        );
+      }
+      throw error;
+    }
   },
 
   async requestPasswordReset(email) {
@@ -401,29 +500,27 @@ const API = {
   },
 
   async logout() {
-    await this._delay();
-    localStorage.setItem(STORAGE_KEYS.USER, 'signed_out');
-    sessionStorage.removeItem(STORAGE_KEYS.USER);
+    const userId = this._userId();
+    if (
+      userId &&
+      !localStorage.getItem(STORAGE_KEYS.LEGACY_OWNER) &&
+      localStorage.getItem(STORAGE_KEYS.ROOMS)
+    ) {
+      localStorage.setItem(STORAGE_KEYS.LEGACY_OWNER, userId);
+    }
+    try {
+      await this._authRequest('logout', {});
+    } finally {
+      if (userId) this._clearScopedData(userId);
+      localStorage.removeItem(STORAGE_KEYS.USER);
+      sessionStorage.removeItem(STORAGE_KEYS.USER);
+    }
     return true;
   },
 
   getCurrentUser() {
     const raw = localStorage.getItem(STORAGE_KEYS.USER) || sessionStorage.getItem(STORAGE_KEYS.USER);
-    if (raw === 'signed_out') {
-      return null;
-    }
-    if (!raw) {
-      // Default initial mock logged-in state for instant preview unless signed out
-      const defaultUser = {
-        id: 'usr_divam_01',
-        name: 'Divam',
-        email: 'divam@breatheclean.io',
-        isOnboarded: true,
-        lastLogin: new Date().toISOString()
-      };
-      localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(defaultUser));
-      return defaultUser;
-    }
+    if (!raw || raw === 'signed_out') return null;
     try {
       return JSON.parse(raw);
     } catch {
@@ -434,26 +531,23 @@ const API = {
   updateUser(updates) {
     const user = this.getCurrentUser() || {};
     const updated = { ...user, ...updates };
-    localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(updated));
+    this._storeUser(updated, Boolean(localStorage.getItem(STORAGE_KEYS.USER)));
     return updated;
   },
 
   // Rooms Endpoints
   getRooms() {
-    const raw = localStorage.getItem(STORAGE_KEYS.ROOMS);
-    if (!raw) {
-      localStorage.setItem(STORAGE_KEYS.ROOMS, JSON.stringify(DEFAULT_ROOMS));
-      return DEFAULT_ROOMS;
-    }
+    const raw = this._getScopedItem(STORAGE_KEYS.ROOMS);
+    if (!raw) return [];
     try {
       return JSON.parse(raw);
     } catch {
-      return DEFAULT_ROOMS;
+      return [];
     }
   },
 
   saveRooms(rooms) {
-    localStorage.setItem(STORAGE_KEYS.ROOMS, JSON.stringify(rooms));
+    this._setScopedItem(STORAGE_KEYS.ROOMS, JSON.stringify(rooms));
   },
 
   async getRoomById(id) {
@@ -465,60 +559,68 @@ const API = {
   async createRoom(roomData) {
     await this._delay();
     const rooms = this.getRooms();
+    const name = typeof roomData.name === 'string' ? roomData.name.trim() : '';
+    if (!name) throw new Error('Enter a name for this space');
+    const requiredNumber = (value, label, minimum) => {
+      const number = Number(value);
+      if (!Number.isFinite(number) || number < minimum) {
+        throw new Error(`Enter a valid ${label}`);
+      }
+      return number;
+    };
+    const length = requiredNumber(roomData.length, 'room length', 1);
+    const width = requiredNumber(roomData.width, 'room width', 1);
+    const ceilingHeight = requiredNumber(roomData.ceilingHeight, 'ceiling height', 1.8);
+    const windowsCount = requiredNumber(roomData.windowsCount, 'window count', 0);
+    const doorsCount = requiredNumber(roomData.doorsCount, 'door count', 1);
+    const typicalOccupants = requiredNumber(roomData.typicalOccupants, 'occupancy', 1);
+    const roomDevices = [
+      {
+        id: Utils.generateId('dev_win'),
+        type: 'window',
+        name: 'Smart Windows',
+        state: 'Not configured',
+        connectionState: 'Not connected',
+        lastUpdated: new Date().toISOString()
+      },
+      {
+        id: Utils.generateId('dev_vent'),
+        type: 'ventilation',
+        name: 'Ventilation',
+        state: 'Not configured',
+        connectionState: 'Not connected',
+        lastUpdated: new Date().toISOString()
+      },
+      {
+        id: Utils.generateId('dev_pur'),
+        type: 'purifier',
+        name: 'Air Purifier',
+        state: 'Not configured',
+        connectionState: 'Not connected',
+        lastUpdated: new Date().toISOString()
+      }
+    ].filter(device => Boolean(roomData.deviceOptions?.[device.type]));
     const newRoom = {
       id: Utils.generateId('room'),
-      name: roomData.name || 'New Space',
+      name,
       type: roomData.type || 'Bedroom',
       image: roomData.image || (roomData.type === 'Living Room' ? 'assets/images/room-livingroom.jpg' : (roomData.type === 'Study' ? 'assets/images/room-study.jpg' : 'assets/images/room-bedroom.jpg')),
-      length: Number(roomData.length || 4.0),
-      width: Number(roomData.width || 3.0),
-      area: Number((Number(roomData.length || 4.0) * Number(roomData.width || 3.0)).toFixed(1)),
-      ceilingHeight: Number(roomData.ceilingHeight || 2.8),
-      windowsCount: Number(roomData.windowsCount || 1),
-      doorsCount: Number(roomData.doorsCount || 1),
-      typicalOccupants: Number(roomData.typicalOccupants || 2),
+      length,
+      width,
+      area: Number((length * width).toFixed(1)),
+      ceilingHeight,
+      windowsCount,
+      doorsCount,
+      typicalOccupants,
       mode: 'AUTO',
-      environment: {
-        outdoorAQI: 112,
-        indoorAQI: 42,
-        co2: 650,
-        temperature: 23,
-        humidity: 50,
-        occupancy: Number(roomData.typicalOccupants || 2),
-        timestamp: new Date().toISOString()
-      },
-      devices: [
-        {
-          id: Utils.generateId('dev_win'),
-          type: 'window',
-          name: 'Smart Windows',
-          state: 'Closed',
-          connectionState: 'Connected',
-          lastUpdated: new Date().toISOString()
-        },
-        {
-          id: Utils.generateId('dev_vent'),
-          type: 'ventilation',
-          name: 'Ventilation',
-          state: 'Normal',
-          connectionState: 'Connected',
-          lastUpdated: new Date().toISOString()
-        },
-        {
-          id: Utils.generateId('dev_pur'),
-          type: 'purifier',
-          name: 'Air Purifier',
-          state: 'Active',
-          connectionState: 'Connected',
-          lastUpdated: new Date().toISOString()
-        }
-      ],
+      environment: {},
+      devices: roomDevices,
       activity: [
         {
           id: Utils.generateId('act'),
           source: 'SYSTEM',
           action: 'Space registered',
-          detail: 'Autonomous air monitoring initialized.',
+          detail: 'Room details saved to this account.',
           timestamp: new Date().toISOString()
         }
       ]
@@ -573,7 +675,7 @@ const API = {
 
   // Active Room ID
   getActiveRoomId() {
-    const id = localStorage.getItem(STORAGE_KEYS.ACTIVE_ROOM_ID);
+    const id = this._getScopedItem(STORAGE_KEYS.ACTIVE_ROOM_ID);
     const rooms = this.getRooms();
     if (id && rooms.some(r => r.id === id)) {
       return id;
@@ -582,7 +684,7 @@ const API = {
   },
 
   setActiveRoomId(id) {
-    localStorage.setItem(STORAGE_KEYS.ACTIVE_ROOM_ID, id);
+    this._setScopedItem(STORAGE_KEYS.ACTIVE_ROOM_ID, id);
   },
 
   // Mode & Device Commands
@@ -650,22 +752,16 @@ const API = {
 
   // Settings
   getSettings() {
-    const raw = localStorage.getItem(STORAGE_KEYS.SETTINGS);
-    const defaults = {
+    const userId = this._userId();
+    return userId ? this.getSettingsForUser(userId) : {
       tempUnit: 'celsius',
       defaultMode: 'AUTO',
       notificationsEnabled: true,
       dataSharing: false
     };
-    if (!raw) return defaults;
-    try {
-      return { ...defaults, ...JSON.parse(raw) };
-    } catch {
-      return defaults;
-    }
   },
 
   saveSettings(settings) {
-    localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+    this._setScopedItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
   }
 };

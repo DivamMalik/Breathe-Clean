@@ -1,5 +1,13 @@
 /* Breathe Clean - View Components & UI Rendering */
 
+function hasCompleteSensorReadings(environment) {
+  return Boolean(
+    environment &&
+    ['indoorAQI', 'outdoorAQI', 'co2', 'temperature', 'humidity', 'occupancy']
+      .every(field => Number.isFinite(environment[field]))
+  );
+}
+
 const Views = {
   // Navigation Sidebar
   renderSidebar(activeView = 'dashboard') {
@@ -50,7 +58,7 @@ const Views = {
     const now = new Date();
     const formattedDate = Utils.formatDate(now);
     const formattedTime = Utils.formatTime(now);
-    const userName = user ? user.name : 'Divam';
+    const userName = user?.name || 'your account';
 
     return `
       <header class="app-header">
@@ -130,18 +138,18 @@ const Views = {
 
   // Metrics Row
   renderMetricsBar(env) {
-    const outdoorAqi = env.outdoorAQI || 0;
-    const indoorAqi = env.indoorAQI || 0;
-    const co2 = env.co2 || 0;
-    const temp = env.temperature || 24;
-    const humidity = env.humidity || 51;
-    const occupancy = env.occupancy || 2;
+    const outdoorAqi = Number.isFinite(env?.outdoorAQI) ? env.outdoorAQI : null;
+    const indoorAqi = Number.isFinite(env?.indoorAQI) ? env.indoorAQI : null;
+    const co2 = Number.isFinite(env?.co2) ? env.co2 : null;
+    const temp = Number.isFinite(env?.temperature) ? env.temperature : null;
+    const humidity = Number.isFinite(env?.humidity) ? env.humidity : null;
+    const occupancy = Number.isFinite(env?.occupancy) ? env.occupancy : null;
 
-    const outStatus = Utils.getAqiStatus(outdoorAqi);
-    const inStatus = Utils.getAqiStatus(indoorAqi);
-    const co2Status = Utils.getCo2Status(co2);
-    const tempStatus = Utils.getTempStatus(temp);
-    const humStatus = Utils.getHumidityStatus(humidity);
+    const outStatus = outdoorAqi === null ? null : Utils.getAqiStatus(outdoorAqi);
+    const inStatus = indoorAqi === null ? null : Utils.getAqiStatus(indoorAqi);
+    const co2Status = co2 === null ? null : Utils.getCo2Status(co2);
+    const tempStatus = temp === null ? null : Utils.getTempStatus(temp);
+    const humStatus = humidity === null ? null : Utils.getHumidityStatus(humidity);
 
     return `
       <section class="metrics-grid">
@@ -156,8 +164,8 @@ const Views = {
             <span class="metric-title">Outdoor AQI</span>
           </div>
           <div class="metric-body">
-            <span class="metric-value">${outdoorAqi}</span>
-            <span class="metric-pill pill-${outStatus.level}">${outStatus.label}</span>
+            <span class="metric-value">${outdoorAqi ?? '—'}</span>
+            <span class="metric-pill ${outStatus ? `pill-${outStatus.level}` : 'pill-neutral'}">${outStatus?.label || 'Unavailable'}</span>
           </div>
         </div>
 
@@ -167,8 +175,8 @@ const Views = {
             <span class="metric-title">Indoor AQI</span>
           </div>
           <div class="metric-body">
-            <span class="metric-value">${indoorAqi}</span>
-            <span class="metric-pill pill-${inStatus.level}">${inStatus.label}</span>
+            <span class="metric-value">${indoorAqi ?? '—'}</span>
+            <span class="metric-pill ${inStatus ? `pill-${inStatus.level}` : 'pill-neutral'}">${inStatus?.label || 'Unavailable'}</span>
           </div>
         </div>
 
@@ -178,8 +186,8 @@ const Views = {
             <span class="metric-title">CO₂</span>
           </div>
           <div class="metric-body">
-            <span class="metric-value">${co2} <small>ppm</small></span>
-            <span class="metric-pill pill-${co2Status.level}">${co2Status.label}</span>
+            <span class="metric-value">${co2 ?? '—'} ${co2 === null ? '' : '<small>ppm</small>'}</span>
+            <span class="metric-pill ${co2Status ? `pill-${co2Status.level}` : 'pill-neutral'}">${co2Status?.label || 'Unavailable'}</span>
           </div>
         </div>
 
@@ -189,8 +197,8 @@ const Views = {
             <span class="metric-title">Temperature</span>
           </div>
           <div class="metric-body">
-            <span class="metric-value">${temp} <small>°C</small></span>
-            <span class="metric-pill pill-${tempStatus.level}">${tempStatus.label}</span>
+            <span class="metric-value">${temp ?? '—'} ${temp === null ? '' : '<small>°C</small>'}</span>
+            <span class="metric-pill ${tempStatus ? `pill-${tempStatus.level}` : 'pill-neutral'}">${tempStatus?.label || 'Unavailable'}</span>
           </div>
         </div>
 
@@ -200,8 +208,8 @@ const Views = {
             <span class="metric-title">Humidity</span>
           </div>
           <div class="metric-body">
-            <span class="metric-value">${humidity} <small>%</small></span>
-            <span class="metric-pill pill-${humStatus.level}">${humStatus.label}</span>
+            <span class="metric-value">${humidity ?? '—'} ${humidity === null ? '' : '<small>%</small>'}</span>
+            <span class="metric-pill ${humStatus ? `pill-${humStatus.level}` : 'pill-neutral'}">${humStatus?.label || 'Unavailable'}</span>
           </div>
         </div>
 
@@ -211,8 +219,8 @@ const Views = {
             <span class="metric-title">Occupancy</span>
           </div>
           <div class="metric-body">
-            <span class="metric-value">${occupancy}</span>
-            <span class="metric-pill pill-neutral">${occupancy > 1 ? 'People' : 'Person'}</span>
+            <span class="metric-value">${occupancy ?? '—'}</span>
+            <span class="metric-pill pill-neutral">${occupancy === null ? 'Unavailable' : occupancy > 1 ? 'People' : 'Person'}</span>
           </div>
         </div>
       </section>
@@ -232,23 +240,34 @@ const Views = {
     }
 
     const isAuto = room.mode === 'AUTO';
-    const decision = room.decision || Engine.decide(room.environment, room, room.devices);
+    const hasReadings = hasCompleteSensorReadings(room.environment);
+    const decision = room.decision || (hasReadings
+      ? Engine.decide(room.environment, room, room.devices)
+      : {
+        title: 'Live sensor readings are not configured for this account.',
+        reason: 'No sensor data has been provided. Run an explicit scenario simulation or connect a supported sensor source.',
+        action: 'No device recommendations have been generated.',
+        expectedOutcome: 'Device controls remain unavailable until this account has sensor readings.',
+        timestamp: new Date().toISOString()
+      });
 
-    const winDev = room.devices.find(d => d.type === 'window') || { state: 'Closed' };
-    const ventDev = room.devices.find(d => d.type === 'ventilation') || { state: 'Normal' };
-    const purDev = room.devices.find(d => d.type === 'purifier') || { state: 'Active' };
+    const winDev = room.devices.find(d => d.type === 'window') || { state: 'Not configured' };
+    const ventDev = room.devices.find(d => d.type === 'ventilation') || { state: 'Not configured' };
+    const purDev = room.devices.find(d => d.type === 'purifier') || { state: 'Not configured' };
 
     const recentActivity = room.activity ? room.activity.slice(0, 6) : [];
 
     const env = room.environment || {};
-    const outdoorAqi = env.outdoorAQI || 112;
-    const indoorAqi = env.indoorAQI || 38;
-    const co2 = env.co2 || 620;
+    const outdoorAqi = Number.isFinite(env.outdoorAQI) ? env.outdoorAQI : null;
+    const indoorAqi = Number.isFinite(env.indoorAQI) ? env.indoorAQI : null;
+    const co2 = Number.isFinite(env.co2) ? env.co2 : null;
 
     // Filtration efficiency differential calculation
-    const reductionPercent = Math.max(0, Math.min(99, Math.round(((outdoorAqi - indoorAqi) / (outdoorAqi || 1)) * 100)));
-    const airChangesHour = isAuto && winDev.state === 'Open' ? '5.4' : (ventDev.state === 'High' ? '4.8' : (ventDev.state === 'Filtered' ? '3.9' : '2.8'));
-    const cleanAirRate = purDev.state === 'High' ? '480' : (purDev.state === 'Active' ? '290' : (purDev.state === 'Low' ? '140' : '0'));
+    const reductionPercent = outdoorAqi === null || indoorAqi === null
+      ? null
+      : Math.max(0, Math.min(99, Math.round(((outdoorAqi - indoorAqi) / (outdoorAqi || 1)) * 100)));
+    const airChangesHour = '—';
+    const cleanAirRate = '—';
 
     return `
       <div class="view-content view-dashboard">
@@ -392,7 +411,7 @@ const Views = {
 
             <div class="decision-compliance-badge" id="btn-card-standards-pill" style="cursor:pointer;" title="Click to view ASHRAE Standard details">
               <span class="compliance-tag">ASHRAE 62.1-2022</span>
-              <span class="compliance-confidence">Deterministic Confidence: 99.4%</span>
+              <span class="compliance-confidence">Recommendations require configured live sensor readings</span>
             </div>
 
             <!-- Card Management Buttons -->
@@ -529,29 +548,29 @@ const Views = {
                 <span class="diag-icon">${Utils.icons.activity}</span>
                 <span class="diag-title">IAQ Filtration Differential</span>
               </div>
-              <span class="diag-badge badge-reduction">-${reductionPercent}% Particulate Load</span>
+              <span class="diag-badge badge-reduction">${reductionPercent === null ? 'Unavailable' : `-${reductionPercent}% Particulate Load`}</span>
             </div>
 
             <div class="differential-bar-container">
               <div class="diff-bar-row">
                 <span class="diff-bar-label">Outdoor Air (Raw)</span>
                 <div class="diff-bar-track">
-                  <div class="diff-bar-fill fill-outdoor" style="width: ${Math.min(100, (outdoorAqi / 200) * 100)}%"></div>
+                  <div class="diff-bar-fill fill-outdoor" style="width: ${outdoorAqi === null ? 0 : Math.min(100, (outdoorAqi / 200) * 100)}%"></div>
                 </div>
-                <span class="diff-bar-val">${outdoorAqi} AQI</span>
+                <span class="diff-bar-val">${outdoorAqi === null ? 'Unavailable' : `${outdoorAqi} AQI`}</span>
               </div>
               <div class="diff-bar-row">
                 <span class="diff-bar-label">Indoor Air (Filtered)</span>
                 <div class="diff-bar-track">
-                  <div class="diff-bar-fill fill-indoor" style="width: ${Math.min(100, (indoorAqi / 200) * 100)}%"></div>
+                  <div class="diff-bar-fill fill-indoor" style="width: ${indoorAqi === null ? 0 : Math.min(100, (indoorAqi / 200) * 100)}%"></div>
                 </div>
-                <span class="diff-bar-val val-clean">${indoorAqi} AQI</span>
+                <span class="diff-bar-val val-clean">${indoorAqi === null ? 'Unavailable' : `${indoorAqi} AQI`}</span>
               </div>
             </div>
 
             <div class="diff-stats-grid">
               <div class="diff-stat-item">
-                <span class="stat-num">-${Math.max(0, outdoorAqi - indoorAqi)}</span>
+                <span class="stat-num">${outdoorAqi === null || indoorAqi === null ? '—' : `-${Math.max(0, outdoorAqi - indoorAqi)}`}</span>
                 <span class="stat-desc">AQI Delta</span>
               </div>
               <div class="diff-stat-item">
@@ -559,11 +578,11 @@ const Views = {
                 <span class="stat-desc">Air Changes/Hr</span>
               </div>
               <div class="diff-stat-item">
-                <span class="stat-num">+${Math.max(0, co2 - 420)}</span>
+                <span class="stat-num">${co2 === null ? '—' : `+${Math.max(0, co2 - 420)}`}</span>
                 <span class="stat-desc">CO₂ Above Ambient</span>
               </div>
               <div class="diff-stat-item">
-                <span class="stat-num">99.4%</span>
+                <span class="stat-num">—</span>
                 <span class="stat-desc">Filter Retention</span>
               </div>
             </div>
@@ -750,17 +769,16 @@ const Views = {
   // Interactive Executive-Grade ASHRAE 62.1-2022 Standards Compliance Modal
   renderStandardsModal(room) {
     const env = (room && room.environment) || {};
-    const outdoorAQI = env.outdoorAQI || 112;
-    const indoorAqi = env.indoorAQI || 38;
-    const co2 = env.co2 || 640;
-    const temp = env.temperature || 24;
-    const occupancy = env.occupancy || 2;
-    const area = (room && room.area) || 24;
-
-    const areaSqFt = area * 10.76;
-    const designCFM = Math.round((5 * occupancy) + (0.06 * areaSqFt));
-    const deliveredCFM = 180;
-    const complianceMargin = Math.round(((deliveredCFM - designCFM) / designCFM) * 100);
+    const outdoorAQI = Number.isFinite(env.outdoorAQI) ? env.outdoorAQI : null;
+    const indoorAqi = Number.isFinite(env.indoorAQI) ? env.indoorAQI : null;
+    const co2 = Number.isFinite(env.co2) ? env.co2 : null;
+    const temp = Number.isFinite(env.temperature) ? env.temperature : null;
+    const occupancy = Number.isFinite(env.occupancy) ? env.occupancy : null;
+    const area = Number.isFinite(room?.area) ? room.area : null;
+    const areaSqFt = area === null ? null : area * 10.76;
+    const designCFM = areaSqFt === null || occupancy === null
+      ? null
+      : Math.round((5 * occupancy) + (0.06 * areaSqFt));
 
     return `
       <div class="modal-backdrop" id="standards-modal-backdrop">
@@ -781,18 +799,18 @@ const Views = {
             <div class="standards-scoreboard">
               <div class="score-card score-target">
                 <span class="score-label">Required Minimum (Vbz)</span>
-                <span class="score-val">${designCFM} <small>CFM</small></span>
+                <span class="score-val">${designCFM === null ? 'Unavailable' : `${designCFM} <small>CFM</small>`}</span>
                 <span class="score-meta">ASHRAE 62.1-2022 Table 6-1</span>
               </div>
               <div class="score-card score-delivered">
                 <span class="score-label">Current Delivered Flow</span>
-                <span class="score-val">${deliveredCFM} <small>CFM</small></span>
-                <span class="score-meta">${(deliveredCFM * 1.699).toFixed(0)} m³/h Active Delivery</span>
+                <span class="score-val">Unavailable</span>
+                <span class="score-meta">No connected ventilation telemetry</span>
               </div>
               <div class="score-card score-status">
                 <span class="score-label">Compliance Margin</span>
-                <span class="score-val text-green">+${complianceMargin}%</span>
-                <span class="score-badge badge-pass">CERTIFIED COMPLIANT</span>
+                <span class="score-val">Unavailable</span>
+                <span class="score-badge">Not a certification</span>
               </div>
             </div>
 
@@ -807,9 +825,9 @@ const Views = {
               </div>
               <div class="formula-legend">
                 <span class="legend-pill"><strong>R<sub>p</sub>:</strong> 5.0 CFM/person (People Rate)</span>
-                <span class="legend-pill"><strong>P<sub>z</sub>:</strong> ${occupancy} Occupants</span>
+                <span class="legend-pill"><strong>P<sub>z</sub>:</strong> ${occupancy ?? 'Unavailable'} Occupants</span>
                 <span class="legend-pill"><strong>R<sub>a</sub>:</strong> 0.06 CFM/ft² (Area Rate)</span>
-                <span class="legend-pill"><strong>A<sub>z</sub>:</strong> ${area} m² (${areaSqFt.toFixed(0)} ft²)</span>
+                <span class="legend-pill"><strong>A<sub>z</sub>:</strong> ${area === null ? 'Unavailable' : `${area} m² (${areaSqFt.toFixed(0)} ft²)`}</span>
               </div>
             </div>
 
@@ -821,7 +839,7 @@ const Views = {
                 <div class="rule-info">
                   <span class="rule-name">Outdoor Smog Lockdown</span>
                   <p class="rule-desc">When Outdoor AQI &gt; 60, motorized windows seal hermetically to shield occupants from toxic particulate infiltration.</p>
-                  <span class="rule-status-tag ${outdoorAQI > 60 ? 'tag-active' : 'tag-nominal'}">${outdoorAQI > 60 ? 'Currently Active (' + outdoorAQI + ' AQI)' : 'Nominal Standby'}</span>
+                  <span class="rule-status-tag ${outdoorAQI === null ? 'tag-nominal' : outdoorAQI > 60 ? 'tag-active' : 'tag-nominal'}">${outdoorAQI === null ? 'Outdoor AQI unavailable' : outdoorAQI > 60 ? 'Safety response active (' + outdoorAQI + ' AQI)' : 'No restriction (' + outdoorAQI + ' AQI)'}</span>
                 </div>
               </div>
 
@@ -830,7 +848,7 @@ const Views = {
                 <div class="rule-info">
                   <span class="rule-name">CO₂ Displacement Flush</span>
                   <p class="rule-desc">When CO₂ exceeds 1,000 ppm, mechanical supply and exhaust ERV ventilation escalates to flush stale air and restore oxygen.</p>
-                  <span class="rule-status-tag ${co2 > 1000 ? 'tag-active' : 'tag-nominal'}">${co2 > 1000 ? 'CO₂ Elevated (' + co2 + ' ppm)' : 'Optimal (' + co2 + ' ppm)'}</span>
+                  <span class="rule-status-tag ${co2 === null ? 'tag-nominal' : co2 > 1000 ? 'tag-active' : 'tag-nominal'}">${co2 === null ? 'CO₂ unavailable' : co2 > 1000 ? 'CO₂ elevated (' + co2 + ' ppm)' : 'CO₂ below ventilation threshold (' + co2 + ' ppm)'}</span>
                 </div>
               </div>
 
@@ -839,7 +857,7 @@ const Views = {
                 <div class="rule-info">
                   <span class="rule-name">Sub-Micron Particulate Protection</span>
                   <p class="rule-desc">MERV-13 mechanical pre-filtration paired with H13 True HEPA ensures 99.97% removal efficiency at 0.3 micrometers.</p>
-                  <span class="rule-status-tag tag-nominal">Indoor AQI: ${indoorAqi} (Clean)</span>
+                  <span class="rule-status-tag ${indoorAqi === null ? 'tag-nominal' : indoorAqi > 50 ? 'tag-active' : 'tag-nominal'}">${indoorAqi === null ? 'Indoor AQI unavailable' : `Indoor AQI: ${indoorAqi} (${indoorAqi > 50 ? 'Elevated' : 'Lower'})`}</span>
                 </div>
               </div>
 
@@ -848,7 +866,7 @@ const Views = {
                 <div class="rule-info">
                   <span class="rule-name">ASHRAE 55 Thermal Comfort</span>
                   <p class="rule-desc">Operative temperature target between 20°C - 25°C with relative humidity managed between 40% - 60%.</p>
-                  <span class="rule-status-tag tag-nominal">Current: ${temp}°C · Comfort Band Met</span>
+                  <span class="rule-status-tag tag-nominal">${temp === null ? 'Temperature unavailable' : `Current: ${temp}°C`}</span>
                 </div>
               </div>
             </div>
@@ -883,16 +901,15 @@ const Views = {
 
         <div class="spaces-grid">
           ${rooms.map(room => {
-            const inAqi = room.environment ? room.environment.indoorAQI : 38;
-            const co2 = room.environment ? room.environment.co2 : 640;
-            const aqiStatus = Utils.getAqiStatus(inAqi);
+            const inAqi = Number.isFinite(room.environment?.indoorAQI) ? room.environment.indoorAQI : null;
+            const co2 = Number.isFinite(room.environment?.co2) ? room.environment.co2 : null;
 
-            let statusLabel = 'Healthy';
-            let statusPillClass = 'pill-good';
-            if (inAqi > 100 || co2 > 1200) {
+            let statusLabel = inAqi === null || co2 === null ? 'Readings unavailable' : 'Healthy';
+            let statusPillClass = inAqi === null || co2 === null ? 'pill-neutral' : 'pill-good';
+            if (inAqi !== null && co2 !== null && (inAqi > 100 || co2 > 1200)) {
               statusLabel = 'Needs attention';
               statusPillClass = 'pill-poor';
-            } else if (inAqi > 50 || co2 > 800) {
+            } else if (inAqi !== null && co2 !== null && (inAqi > 50 || co2 > 800)) {
               statusLabel = 'Good';
               statusPillClass = 'pill-moderate';
             }
@@ -925,15 +942,15 @@ const Views = {
                   <div class="space-metrics-strip">
                     <div class="space-metric-item">
                       <span class="lbl">Indoor AQI</span>
-                      <span class="val">${inAqi}</span>
+                      <span class="val">${inAqi ?? '—'}</span>
                     </div>
                     <div class="space-metric-item">
                       <span class="lbl">CO₂</span>
-                      <span class="val">${co2} <small>ppm</small></span>
+                      <span class="val">${co2 === null ? '—' : `${co2} <small>ppm</small>`}</span>
                     </div>
                     <div class="space-metric-item">
                       <span class="lbl">Devices</span>
-                      <span class="val">${room.devices ? room.devices.length : 3}</span>
+                      <span class="val">${room.devices ? room.devices.length : '—'}</span>
                     </div>
                   </div>
 
@@ -954,8 +971,32 @@ const Views = {
 
   // Simulation Page View
   renderSimulation(room) {
-    const env = room ? room.environment : { outdoorAQI: 112, indoorAQI: 38, co2: 640, temperature: 24, humidity: 51, occupancy: 2 };
-    const decision = room ? room.decision || Engine.decide(env, room, room.devices) : null;
+    const env = room?.environment || {};
+    if (!hasCompleteSensorReadings(env)) {
+      return `
+        <div class="view-content view-simulation">
+          <div class="view-page-header">
+            <div>
+              <h2 class="page-title">Environment Simulation</h2>
+              <p class="page-subtitle">Run an explicit scenario to test the backend safety rules.</p>
+            </div>
+            <div class="sim-mode-badge sim-auto" title="Backend applies its safety policy when requested">
+              Policy: <strong>Apply on request</strong>
+            </div>
+          </div>
+          <div class="sim-presets-bar">
+            <span class="presets-label">Preset scenarios:</span>
+            <button class="preset-btn" data-scenario="clean-air">Clean Air</button>
+            <button class="preset-btn" data-scenario="pollution">Outdoor Pollution</button>
+            <button class="preset-btn" data-scenario="high-co2">High CO₂</button>
+            <button class="preset-btn" data-scenario="bad-air">Bad Air</button>
+          </div>
+          <p role="status">No sensor readings are available for this account. Sensor sliders are unavailable until readings are configured.</p>
+        </div>
+      `;
+    }
+
+    const decision = room.decision || Engine.decide(env, room, room.devices);
 
     return `
       <div class="view-content view-simulation">
@@ -1118,7 +1159,7 @@ const Views = {
         <div class="view-page-header">
           <div>
             <h2 class="page-title">Analytics</h2>
-            <p class="page-subtitle">Historical air quality trends, autonomous actions, and device efficiency.</p>
+            <p class="page-subtitle">Account-specific air-quality history and device analytics.</p>
           </div>
           <div class="analytics-time-pills">
             <button class="time-filter-btn active" data-time="24H">24H</button>
@@ -1138,8 +1179,7 @@ const Views = {
               </select>
             </div>
             <div class="chart-legend">
-              <span class="legend-item"><span class="legend-dot" style="background:#16a34a"></span> Target Safe Zone (&lt;50)</span>
-              <span class="legend-item"><span class="legend-dot" style="background:#059669"></span> Measured Level</span>
+              <span class="legend-item" id="analytics-data-status">Loading account history…</span>
             </div>
           </div>
 
@@ -1152,26 +1192,26 @@ const Views = {
         <div class="analytics-stats-grid">
           <div class="stat-card">
             <span class="stat-label">Automatic actions</span>
-            <span class="stat-value">12</span>
-            <span class="stat-sub">Last 24 hours</span>
+            <span class="stat-value">—</span>
+            <span class="stat-sub">Unavailable</span>
           </div>
 
           <div class="stat-card">
             <span class="stat-label">Manual overrides</span>
-            <span class="stat-value">3</span>
-            <span class="stat-sub">Last 24 hours</span>
+            <span class="stat-value">—</span>
+            <span class="stat-sub">Unavailable</span>
           </div>
 
           <div class="stat-card">
             <span class="stat-label">Avg. Indoor AQI</span>
-            <span class="stat-value">38</span>
-            <span class="stat-sub">Optimal healthy range</span>
+            <span class="stat-value">—</span>
+            <span class="stat-sub">No account history available</span>
           </div>
 
           <div class="stat-card">
             <span class="stat-label">HEPA Filter Life</span>
-            <span class="stat-value">84%</span>
-            <span class="stat-sub">Est. 142 days remaining</span>
+            <span class="stat-value">—</span>
+            <span class="stat-sub">No connected filter telemetry</span>
           </div>
         </div>
       </div>
@@ -1198,7 +1238,7 @@ const Views = {
         <div class="view-page-header">
           <div>
             <h2 class="page-title">Devices</h2>
-            <p class="page-subtitle">Connected environmental actuators, air purifiers, and automated windows.</p>
+            <p class="page-subtitle">Configured environmental actuators and their reported status.</p>
           </div>
         </div>
 
@@ -1215,7 +1255,7 @@ const Views = {
               </tr>
             </thead>
             <tbody>
-              ${allDevices.map(d => {
+              ${allDevices.length ? allDevices.map(d => {
                 let icon = Utils.icons.purifier;
                 if (d.type === 'window') icon = Utils.icons.window;
                 if (d.type === 'ventilation') icon = Utils.icons.fan;
@@ -1235,24 +1275,24 @@ const Views = {
                       <span class="room-pill">${Utils.escapeHtml(d.roomName)}</span>
                     </td>
                     <td>
-                      <span class="conn-badge conn-${(d.connectionState || 'Connected').toLowerCase()}">
-                        ● ${d.connectionState || 'Connected'}
+                      <span class="conn-badge conn-${(d.connectionState || 'Unavailable').toLowerCase()}">
+                        ● ${d.connectionState || 'Status unavailable'}
                       </span>
                     </td>
                     <td>
-                      <span class="state-pill state-${(d.state || '').toLowerCase()}">${d.state}</span>
+                      <span class="state-pill state-${(d.state || 'Unavailable').toLowerCase()}">${d.state || 'State unavailable'}</span>
                     </td>
                     <td class="text-muted">
                       ${Utils.timeAgo(d.lastUpdated || Date.now())}
                     </td>
                     <td>
-                      <button class="btn btn-sm btn-outline btn-device-toggle" data-room-id="${d.roomId}" data-device-id="${d.id}" data-current="${d.state}" ${d.roomId !== State.activeRoomId ? 'disabled title="Unsupported: backend device state is global, not per-space"' : ''}>
+                      <button class="btn btn-sm btn-outline btn-device-toggle" data-room-id="${d.roomId}" data-device-id="${d.id}" data-current="${d.state}" ${d.roomId !== State.activeRoomId || d.state === 'Not configured' || d.connectionState === 'Not connected' ? 'disabled title="Device is not configured or connected"' : ''}>
                         Toggle
                       </button>
                     </td>
                   </tr>
                 `;
-              }).join('')}
+              }).join('') : '<tr><td colspan="6" role="status">No devices have been configured for this account.</td></tr>'}
             </tbody>
           </table>
         </div>
@@ -1280,14 +1320,14 @@ const Views = {
             <div class="settings-row">
               <div>
                 <strong>Full Name</strong>
-                <p class="text-muted">${Utils.escapeHtml(user ? user.name : 'Divam')}</p>
+                <p class="text-muted">${Utils.escapeHtml(user?.name || 'Not provided')}</p>
               </div>
               <button class="btn btn-outline btn-sm" id="btn-edit-profile">Edit</button>
             </div>
             <div class="settings-row">
               <div>
                 <strong>Email Address</strong>
-                <p class="text-muted">${Utils.escapeHtml(user ? user.email : 'divam@breatheclean.io')}</p>
+                <p class="text-muted">${Utils.escapeHtml(user?.email || '')}</p>
               </div>
               <span class="badge-neutral">Verified</span>
             </div>
@@ -1352,17 +1392,9 @@ const Views = {
             </div>
           </div>
 
-          <!-- Data & Privacy Section -->
           <div class="settings-card">
             <h3 class="settings-card-title">Data & Privacy</h3>
-            <p class="text-muted mb-3">All room, simulation, and device history are stored locally in your browser.</p>
-            <div class="settings-row">
-              <div>
-                <strong>Reset Demo Data</strong>
-                <p class="text-muted">Revert rooms, devices, and history to factory prototype defaults.</p>
-              </div>
-              <button class="btn btn-outline btn-danger btn-sm" id="btn-reset-demo-data">Reset to Defaults</button>
-            </div>
+            <p class="text-muted mb-3">Account setup and location are stored securely in your account. No demo-data reset is available for account data.</p>
           </div>
         </div>
       </div>
@@ -1410,7 +1442,7 @@ const Views = {
               <form id="form-sign-in" class="auth-form">
                 <div class="form-field">
                   <label for="signin-email">Email</label>
-                  <input type="email" id="signin-email" placeholder="you@example.com" value="divam@breatheclean.io" required />
+                  <input type="email" id="signin-email" placeholder="Enter your email" autocomplete="email" required />
                 </div>
 
                 <div class="form-field">
@@ -1419,7 +1451,7 @@ const Views = {
                     <a href="#" class="field-link" id="link-forgot-pw">Forgot password?</a>
                   </div>
                   <div class="input-password-wrapper">
-                    <input type="password" id="signin-password" placeholder="Enter your password" value="BreatheClean#2026" required />
+                    <input type="password" id="signin-password" placeholder="Enter your password" autocomplete="current-password" required />
                     <button type="button" class="btn-toggle-pw" aria-label="Toggle password visibility">${Utils.icons.eye}</button>
                   </div>
                 </div>
@@ -1506,18 +1538,18 @@ const Views = {
               <form id="form-sign-up" class="auth-form">
                 <div class="form-field">
                   <label for="signup-name">Full name</label>
-                  <input type="text" id="signup-name" placeholder="Divam Malik" required />
+                  <input type="text" id="signup-name" placeholder="Enter your full name" autocomplete="name" required />
                 </div>
 
                 <div class="form-field">
                   <label for="signup-email">Email</label>
-                  <input type="email" id="signup-email" placeholder="you@example.com" required />
+                  <input type="email" id="signup-email" placeholder="Enter your email" autocomplete="email" required />
                 </div>
 
                 <div class="form-field">
                   <label for="signup-password">Password</label>
                   <div class="input-password-wrapper">
-                    <input type="password" id="signup-password" placeholder="Create a password" value="BreatheClean#2026" required />
+                    <input type="password" id="signup-password" placeholder="Create a password" autocomplete="new-password" required />
                     <button type="button" class="btn-toggle-pw" aria-label="Toggle password visibility">${Utils.icons.eye}</button>
                   </div>
                 </div>
@@ -1525,7 +1557,7 @@ const Views = {
                 <div class="form-field">
                   <label for="signup-password-confirm">Confirm password</label>
                   <div class="input-password-wrapper">
-                    <input type="password" id="signup-password-confirm" placeholder="Confirm your password" value="BreatheClean#2026" required />
+                    <input type="password" id="signup-password-confirm" placeholder="Confirm your password" autocomplete="new-password" required />
                     <button type="button" class="btn-toggle-pw" aria-label="Toggle password visibility">${Utils.icons.eye}</button>
                   </div>
                 </div>
@@ -1563,7 +1595,33 @@ const Views = {
   },
 
   // First-Time Onboarding Flow (Account -> Spaces -> Devices -> Preferences -> Ready)
-  renderOnboarding(step = 2) {
+  renderOnboarding(step = 1) {
+    const rooms = State.rooms.length ? State.rooms : API.getRooms();
+    const user = State.user || {};
+    const devices = App.onboardingDevices;
+    const preferences = App.onboardingPreferences || {
+      tempUnit: '',
+      notificationsEnabled: null
+    };
+    const location = App.onboardingLocation;
+    const outdoorAirQuality = App.onboardingOutdoorAirQuality;
+    const locationSummary = location
+      ? `${Utils.escapeHtml(location.placeName || 'Selected location')} · ${location.source === 'gps' ? 'GPS-detected' : 'Manually entered'} (${Number(location.latitude).toFixed(5)}, ${Number(location.longitude).toFixed(5)})${location.source === 'gps' && Number.isFinite(location.accuracy) ? ` (±${Math.round(location.accuracy)} m)` : ''} · recorded ${Utils.escapeHtml(new Date(location.recordedAt).toLocaleString())}`
+      : 'No location selected.';
+    const outdoorAirQualitySummary = outdoorAirQuality
+      ? `Outdoor AQI: ${outdoorAirQuality.aqi} (${Utils.escapeHtml(outdoorAirQuality.category || 'current')}) · ${Utils.escapeHtml(outdoorAirQuality.placeName || location?.placeName || 'Saved location')} · ${Utils.escapeHtml(outdoorAirQuality.unit)} · ${Utils.escapeHtml(outdoorAirQuality.source)} · updated ${Utils.escapeHtml(new Date(outdoorAirQuality.lastUpdated).toLocaleString())}`
+      : 'Outdoor AQI unavailable.';
+    const roomCards = rooms.map(room => `
+      <div class="onboarding-room-card">
+        <div class="onb-room-meta">
+          <strong>${Utils.escapeHtml(room.name)}</strong>
+          <span>${Number(room.area || room.length * room.width || 0).toFixed(1)} m²</span>
+          <small>${room.windowsCount} windows · ${room.typicalOccupants} occupants</small>
+        </div>
+        ${room.image ? `<img src="${Utils.escapeHtml(room.image)}" alt="" class="onb-room-img" />` : ''}
+      </div>
+    `).join('');
+
     return `
       <div class="onboarding-page-container">
         <header class="onboarding-header">
@@ -1602,49 +1660,39 @@ const Views = {
         </header>
 
         <main class="onboarding-body">
-          ${step === 2 ? `
+          ${step === 1 ? `
+            <div class="onboarding-content-card">
+              <h2 class="onboarding-title">Account ready</h2>
+              <p class="onboarding-subtitle">Confirm your account before configuring your spaces.</p>
+              <div class="onboarding-room-card">
+                <div class="onb-room-meta">
+                  <strong>${Utils.escapeHtml(user.name || 'New user')}</strong>
+                  <span>${Utils.escapeHtml(user.email || '')}</span>
+                </div>
+              </div>
+              <p class="setup-storage-note">Your setup is saved to your Breathe Clean account.</p>
+              <p id="onboarding-error" role="alert" aria-live="polite" style="display:none; color:#b91c1c; font-size:13px; margin:12px 0 0;"></p>
+              <div class="onboarding-actions-footer">
+                <span></span>
+                <button class="btn btn-primary" id="btn-onboarding-continue">
+                  <span>Continue</span> ${Utils.icons.arrowRight}
+                </button>
+              </div>
+            </div>
+          ` : step === 2 ? `
             <div class="onboarding-content-card">
               <h2 class="onboarding-title">Let's set up your spaces</h2>
               <p class="onboarding-subtitle">Add the rooms you want to monitor and protect.</p>
 
               <div class="onboarding-spaces-grid">
-                <!-- Bedroom Card -->
-                <div class="onboarding-room-card">
-                  <div class="onb-room-meta">
-                    <strong>Bedroom</strong>
-                    <span>12.5 m²</span>
-                    <small>1 window · 1 purifier</small>
-                  </div>
-                  <img src="assets/images/room-bedroom.jpg" alt="Bedroom" class="onb-room-img" />
-                </div>
-
-                <!-- Living Room Card -->
-                <div class="onboarding-room-card">
-                  <div class="onb-room-meta">
-                    <strong>Living Room</strong>
-                    <span>25 m²</span>
-                    <small>2 windows · 1 purifier</small>
-                  </div>
-                  <img src="assets/images/room-livingroom.jpg" alt="Living Room" class="onb-room-img" />
-                </div>
-
-                <!-- Study Card -->
-                <div class="onboarding-room-card">
-                  <div class="onb-room-meta">
-                    <strong>Study</strong>
-                    <span>10 m²</span>
-                    <small>1 window · No purifier</small>
-                  </div>
-                  <img src="assets/images/room-study.jpg" alt="Study" class="onb-room-img" />
-                </div>
-
-                <!-- Add another room card -->
+                ${roomCards}
                 <button class="onboarding-add-card" id="btn-onboarding-add-room">
                   <span class="add-icon">${Utils.icons.plus}</span>
                   <span>Add another room</span>
                 </button>
               </div>
 
+              <p id="onboarding-error" role="alert" aria-live="polite" style="display:none; color:#b91c1c; font-size:13px; margin:12px 0 0;"></p>
               <div class="onboarding-actions-footer">
                 <button class="btn btn-outline" id="btn-onboarding-back">Back</button>
                 <button class="btn btn-primary" id="btn-onboarding-continue">
@@ -1652,17 +1700,94 @@ const Views = {
                 </button>
               </div>
             </div>
+          ` : step === 3 ? `
+            <div class="onboarding-content-card">
+              <h2 class="onboarding-title">Configure device types</h2>
+              <p class="onboarding-subtitle">Choose device types for your browser-stored room profile. This does not connect physical hardware.</p>
+              <div class="devices-config-grid">
+                <label class="device-config-item checkbox-label"><input type="checkbox" data-onboarding-device="window" ${devices.window ? 'checked' : ''} /> Smart windows</label>
+                <label class="device-config-item checkbox-label"><input type="checkbox" data-onboarding-device="ventilation" ${devices.ventilation ? 'checked' : ''} /> Ventilation</label>
+                <label class="device-config-item checkbox-label"><input type="checkbox" data-onboarding-device="purifier" ${devices.purifier ? 'checked' : ''} /> Air purifier</label>
+              </div>
+              <p id="onboarding-error" role="alert" aria-live="polite" style="display:none; color:#b91c1c; font-size:13px; margin:12px 0 0;"></p>
+              <div class="onboarding-actions-footer">
+                <button class="btn btn-outline" id="btn-onboarding-back">Back</button>
+                <button class="btn btn-primary" id="btn-onboarding-continue"><span>Continue</span> ${Utils.icons.arrowRight}</button>
+              </div>
+            </div>
+          ` : step === 4 ? `
+            <div class="onboarding-content-card">
+              <h2 class="onboarding-title">Set your preferences</h2>
+              <p class="onboarding-subtitle">Choose how readings and alerts are presented, and optionally provide a location for outdoor air-quality data.</p>
+              <div class="modal-form-fields">
+                <div class="form-field">
+                  <label for="onboarding-notifications">Air-quality notifications</label>
+                  <select id="onboarding-notifications" class="settings-select">
+                    <option value="" ${preferences.notificationsEnabled === null ? 'selected' : ''}>Choose a preference</option>
+                    <option value="enabled" ${preferences.notificationsEnabled === true ? 'selected' : ''}>Enable notifications</option>
+                    <option value="disabled" ${preferences.notificationsEnabled === false ? 'selected' : ''}>Disable notifications</option>
+                  </select>
+                </div>
+                <div class="form-field">
+                  <label for="onboarding-temp-unit">Temperature units</label>
+                  <select id="onboarding-temp-unit" class="settings-select">
+                    <option value="" ${preferences.tempUnit ? '' : 'selected'}>Choose temperature units</option>
+                    <option value="celsius" ${preferences.tempUnit === 'celsius' ? 'selected' : ''}>Celsius</option>
+                    <option value="fahrenheit" ${preferences.tempUnit === 'fahrenheit' ? 'selected' : ''}>Fahrenheit</option>
+                  </select>
+                </div>
+              </div>
+              <section class="modal-form-fields" aria-labelledby="onboarding-location-title">
+                <h3 id="onboarding-location-title">Allow location access to check outdoor air quality</h3>
+                <p>Location is used only to request current outdoor AQI for your coordinates. Your browser will ask before sharing GPS location. You can enter coordinates manually instead.</p>
+                <p id="onboarding-location-summary">${locationSummary}</p>
+                <div class="form-field">
+                  <button type="button" class="btn btn-outline" id="btn-onboarding-use-location">Use my current location</button>
+                </div>
+                <div class="form-field">
+                  <label for="onboarding-location-search">Search for an Indian city or address</label>
+                  <input id="onboarding-location-search" type="search" placeholder="Search city, area, or address" autocomplete="off" />
+                  <button type="button" class="btn btn-outline" id="btn-onboarding-search-location">Search locations</button>
+                  <p class="text-muted">Google Maps search is optional. If unavailable, enter coordinates below.</p>
+                  <div id="onboarding-location-results" class="onboarding-location-results" aria-live="polite"></div>
+                </div>
+                <div class="form-field">
+                  <label for="onboarding-manual-latitude">Latitude</label>
+                  <input id="onboarding-manual-latitude" type="number" min="-90" max="90" step="any" value="${location?.source === 'manual' ? location.latitude : ''}" />
+                </div>
+                <div class="form-field">
+                  <label for="onboarding-manual-longitude">Longitude</label>
+                  <input id="onboarding-manual-longitude" type="number" min="-180" max="180" step="any" value="${location?.source === 'manual' ? location.longitude : ''}" />
+                </div>
+                <div class="form-field">
+                  <button type="button" class="btn btn-outline" id="btn-onboarding-save-manual-location">Use these coordinates</button>
+                  <button type="button" class="btn btn-outline" id="btn-onboarding-retry-aqi" ${location ? '' : 'disabled'}>Retry outdoor AQI</button>
+                </div>
+                <p id="onboarding-outdoor-aqi" aria-live="polite">${outdoorAirQualitySummary}</p>
+                <p id="onboarding-location-feedback" role="status" aria-live="polite"></p>
+              </section>
+              <p id="onboarding-error" role="alert" aria-live="polite" style="display:none; color:#b91c1c; font-size:13px; margin:12px 0 0;"></p>
+              <div class="onboarding-actions-footer">
+                <button class="btn btn-outline" id="btn-onboarding-back">Back</button>
+                <button class="btn btn-primary" id="btn-onboarding-continue"><span>Continue</span> ${Utils.icons.arrowRight}</button>
+              </div>
+            </div>
           ` : `
             <div class="onboarding-content-card ready-step-card text-center">
               <div class="ready-check-icon">${Utils.icons.shieldCheck}</div>
-              <h2 class="onboarding-title">Welcome to Breathe Clean</h2>
-              <p class="onboarding-subtitle">Your spaces and smart actuators are calibrated. Autonomous environmental orchestration is active.</p>
+              <h2 class="onboarding-title">Setup is ready</h2>
+              <p class="onboarding-subtitle">${rooms.length} room${rooms.length === 1 ? '' : 's'}, device and preference selections, and location are ready to save to your account.</p>
+              <p id="onboarding-error" role="alert" aria-live="polite" style="display:none; color:#b91c1c; font-size:13px; margin:12px 0 0;"></p>
+              <div class="onboarding-actions-footer">
+              <button class="btn btn-outline" id="btn-onboarding-back">Back</button>
               <button class="btn btn-primary btn-lg" id="btn-onboarding-finish">
-                <span>Enter Dashboard</span> ${Utils.icons.arrowRight}
+                <span>Save setup & enter dashboard</span> ${Utils.icons.arrowRight}
               </button>
+              </div>
             </div>
           `}
         </main>
+        <div id="modal-container"></div>
       </div>
     `;
   },
@@ -1670,14 +1795,14 @@ const Views = {
   // Add / Edit Space Multi-step Modal (Matching Reference Modal)
   renderSpaceModal(roomToEdit = null) {
     const isEdit = !!roomToEdit;
-    const name = roomToEdit ? roomToEdit.name : 'Bedroom';
+    const name = roomToEdit ? roomToEdit.name : '';
     const type = roomToEdit ? roomToEdit.type : 'Bedroom';
-    const length = roomToEdit ? roomToEdit.length : 4.5;
-    const width = roomToEdit ? roomToEdit.width : 3.0;
-    const ceilingHeight = roomToEdit ? roomToEdit.ceilingHeight : 2.8;
-    const windows = roomToEdit ? roomToEdit.windowsCount : 1;
-    const doors = roomToEdit ? roomToEdit.doorsCount : 1;
-    const occupants = roomToEdit ? roomToEdit.typicalOccupants : 2;
+    const length = roomToEdit ? roomToEdit.length : '';
+    const width = roomToEdit ? roomToEdit.width : '';
+    const ceilingHeight = roomToEdit ? roomToEdit.ceilingHeight : '';
+    const windows = roomToEdit ? roomToEdit.windowsCount : '';
+    const doors = roomToEdit ? roomToEdit.doorsCount : '';
+    const occupants = roomToEdit ? roomToEdit.typicalOccupants : '';
 
     return `
       <div class="modal-backdrop" id="space-modal-backdrop">
@@ -1711,12 +1836,13 @@ const Views = {
             </div>
 
             <form id="form-space-modal" data-edit-id="${isEdit ? roomToEdit.id : ''}">
+              <p id="space-modal-error" role="alert" aria-live="polite" style="display:none; color:#b91c1c; font-size:13px; margin:0;"></p>
               <!-- STEP 1: Basic Info -->
               <div class="space-step-pane" id="space-step-pane-1">
                 <div class="modal-form-fields">
                   <div class="form-field">
                     <label for="room-input-name">Room name</label>
-                    <input type="text" id="room-input-name" value="${Utils.escapeHtml(name)}" placeholder="e.g. Master Bedroom" required />
+                    <input type="text" id="room-input-name" value="${Utils.escapeHtml(name)}" placeholder="Enter a room name" required />
                   </div>
 
                   <div class="form-field">
@@ -2132,7 +2258,7 @@ const Views = {
     `;
   },
 
-  // Authentic Google OAuth Account Picker Modal
+  // Google authentication is not connected to the backend yet.
   renderGoogleAccountPickerModal() {
     return `
       <div class="modal-backdrop google-auth-backdrop" id="google-auth-backdrop">
@@ -2146,63 +2272,8 @@ const Views = {
           </div>
 
           <div class="google-dialog-body">
-            <h3 class="google-dialog-title">Choose an account</h3>
-            <p class="google-dialog-sub">to continue to <strong style="color:#0f172a;">Breathe Clean</strong></p>
-
-            <div class="google-accounts-list">
-              <!-- Primary Account -->
-              <button class="google-account-item" id="btn-select-google-account-1">
-                <div class="google-avatar-circle">
-                  <span>D</span>
-                </div>
-                <div class="google-account-info">
-                  <span class="google-user-name">Divam Malik</span>
-                  <span class="google-user-email">divam.malik@gmail.com</span>
-                </div>
-                <span class="google-active-indicator">${Utils.icons.check}</span>
-              </button>
-
-              <!-- Secondary Account option -->
-              <button class="google-account-item" id="btn-select-google-account-2">
-                <div class="google-avatar-circle" style="background: #0d9488;">
-                  <span>B</span>
-                </div>
-                <div class="google-account-info">
-                  <span class="google-user-name">Breathe Clean Dev</span>
-                  <span class="google-user-email">engineering@breatheclean.io</span>
-                </div>
-              </button>
-
-              <!-- Use another account action -->
-              <button class="google-account-item google-item-add" id="btn-toggle-custom-google">
-                <div class="google-avatar-circle google-avatar-ghost">
-                  ${Utils.icons.plus}
-                </div>
-                <div class="google-account-info">
-                  <span class="google-user-name">Use another Google account</span>
-                  <span class="google-user-email">Sign in with any @gmail.com address</span>
-                </div>
-              </button>
-            </div>
-
-            <!-- Custom Google Account Inline Form (collapsible) -->
-            <form id="form-custom-google-auth" class="custom-google-form" style="display: none; margin-bottom: 16px;">
-              <div class="form-field" style="margin-bottom: 10px;">
-                <label for="custom-google-email" style="font-size: 12px; font-weight: 600; color: #475569;">Your Google Email</label>
-                <input type="email" id="custom-google-email" placeholder="you@gmail.com" style="width: 100%; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px;" required />
-              </div>
-              <div class="form-field" style="margin-bottom: 12px;">
-                <label for="custom-google-name" style="font-size: 12px; font-weight: 600; color: #475569;">Full Name (optional)</label>
-                <input type="text" id="custom-google-name" placeholder="First & Last Name" style="width: 100%; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px;" />
-              </div>
-              <button type="submit" class="btn btn-primary btn-block" style="padding: 10px; font-size: 13px;">
-                Continue with this Google Account
-              </button>
-            </form>
-
-            <div class="google-dialog-footer-text">
-              To continue, Google will share your name, email address, language preference, and profile picture with Breathe Clean. Before using this app, review their <a href="#" onclick="return false;">Privacy Policy</a> and <a href="#" onclick="return false;">Terms of Service</a>.
-            </div>
+            <h3 class="google-dialog-title">Google sign-in is simulated</h3>
+            <p class="google-dialog-sub">Google authentication is not connected to Breathe Clean's backend. Use email and password to create an account or sign in.</p>
           </div>
         </div>
       </div>
@@ -2321,14 +2392,8 @@ const Views = {
 
             <div class="setup-actions-footer">
               <button type="button" class="btn btn-primary btn-block btn-save-gsi" id="btn-save-and-connect-gsi">
-                <span>Save Client ID & Open Real Google Sign-In</span> ${Utils.icons.arrowRight}
+                <span>Save Client ID (Google sign-in remains simulated)</span> ${Utils.icons.arrowRight}
               </button>
-              
-              <div class="setup-secondary-actions">
-                <button type="button" class="btn-link-demo" id="btn-demo-google-bypass">
-                  No Client ID right now? Click for instant personal account test
-                </button>
-              </div>
             </div>
           </div>
         </div>

@@ -11,13 +11,13 @@ const BCRYPT_ROUNDS = 12;
 const MAX_PASSWORD_BYTES = 72;
 const PASSWORD_RESET_TTL_MS = 15 * 60 * 1000;
 
-function normalizeAndValidateCredentials(body) {
+function normalizeAndValidateCredentials(body, { allowName = false } = {}) {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     return { error: "Request body must be a JSON object" };
   }
 
   const unknownField = Object.keys(body).find(
-    (field) => !["email", "password"].includes(field)
+    (field) => !["email", "password", ...(allowName ? ["name"] : [])].includes(field)
   );
   if (unknownField) {
     return { error: `Unexpected field: ${unknownField}` };
@@ -45,7 +45,18 @@ function normalizeAndValidateCredentials(body) {
     };
   }
 
-  return { email, password: body.password };
+  const name = allowName && typeof body.name === "string"
+    ? body.name.trim()
+    : null;
+  if (
+    allowName &&
+    body.name !== undefined &&
+    (typeof body.name !== "string" || !name || name.length > 100)
+  ) {
+    return { error: "Name must be between 1 and 100 characters" };
+  }
+
+  return { email, password: body.password, name };
 }
 
 function createSession(request, userId) {
@@ -69,7 +80,7 @@ function createSession(request, userId) {
 }
 
 async function register(request, response) {
-  const credentials = normalizeAndValidateCredentials(request.body);
+  const credentials = normalizeAndValidateCredentials(request.body, { allowName: true });
   if (credentials.error) {
     return response.status(400).json({
       success: false,
@@ -79,12 +90,23 @@ async function register(request, response) {
 
   const passwordHash = await bcrypt.hash(credentials.password, BCRYPT_ROUNDS);
   try {
-    const result = createUser(credentials.email, passwordHash);
+    const result = createUser(credentials.email, passwordHash, credentials.name);
+    const userId = Number(result.lastInsertRowid);
+    try {
+      await createSession(request, userId);
+    } catch {
+      return response.status(503).json({
+        success: false,
+        accountCreated: true,
+        error: "Your account was created, but sign-in could not be started. Sign in with your new credentials."
+      });
+    }
     return response.status(201).json({
       success: true,
       user: {
-        id: Number(result.lastInsertRowid),
-        email: credentials.email
+        id: userId,
+        email: credentials.email,
+        name: credentials.name
       }
     });
   } catch (error) {
@@ -123,8 +145,20 @@ async function login(request, response) {
     success: true,
     user: {
       id: user.id,
-      email: user.email
+      email: user.email,
+      name: user.name
     }
+  });
+}
+
+function logout(request, response, next) {
+  if (!request.session) {
+    return response.json({ success: true });
+  }
+  return request.session.destroy((error) => {
+    if (error) return next(error);
+    response.clearCookie("breathe.sid");
+    return response.json({ success: true });
   });
 }
 
@@ -229,6 +263,7 @@ async function resetPassword(request, response) {
 
 module.exports = {
   login,
+  logout,
   normalizeAndValidateCredentials,
   register,
   requestPasswordReset,

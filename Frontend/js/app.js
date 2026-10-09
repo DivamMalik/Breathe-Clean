@@ -7,8 +7,15 @@ const App = {
   pendingTargetMode: null,
   dashboardRequestId: 0,
   deviceRequestId: 0,
+  onboardingStep: 1,
+  onboardingDevices: { window: false, ventilation: false, purifier: false },
+  onboardingPreferences: null,
+  onboardingLocation: null,
+  onboardingOutdoorAirQuality: null,
+  onboardingUserId: null,
+  onboardingSaveQueue: Promise.resolve(),
 
-  init() {
+  async init() {
     State.init();
     Chatbot.init();
 
@@ -18,12 +25,35 @@ const App = {
       State.activeView = hash;
     } else if (hash === 'signin') {
       State.user = null;
+      State.rooms = [];
+      State.activeRoomId = null;
     } else if (hash === 'onboarding') {
-      State.user = { id: 'usr_new', name: 'Divam', email: 'divam@breatheclean.io', isOnboarded: false };
+      State.user = null;
+      State.rooms = [];
+      State.activeRoomId = null;
+    }
+
+    let restoreError = null;
+    if (State.user && Number.isSafeInteger(State.user.id)) {
+      try {
+        const restoredUser = await API.restoreAccountSetup();
+        this.onboardingUserId = null;
+        this.setAuthenticatedUser(restoredUser);
+      } catch (error) {
+        restoreError = error;
+        API.clearRememberedUser();
+        Chatbot.clearHistory();
+        State.user = null;
+        State.rooms = [];
+        State.activeRoomId = null;
+      }
     }
 
     // Check auth & onboarding state
     this.renderCurrentApplicationState();
+    if (restoreError) {
+      Utils.showToast('Your account session could not be restored. Sign in to load your saved setup.', 'warning');
+    }
 
     // Subscribe to state changes
     State.subscribe((event, data) => {
@@ -39,9 +69,15 @@ const App = {
         }
       } else if (newHash === 'signin') {
         State.user = null;
+        State.rooms = [];
+        State.activeRoomId = null;
+        this.onboardingUserId = null;
         this.renderCurrentApplicationState();
       } else if (newHash === 'onboarding') {
-        State.user = { id: 'usr_new', name: 'Divam', email: 'divam@breatheclean.io', isOnboarded: false };
+        State.user = null;
+        State.rooms = [];
+        State.activeRoomId = null;
+        this.onboardingUserId = null;
         this.renderCurrentApplicationState();
       }
     });
@@ -65,7 +101,8 @@ const App = {
     // Check if user needs onboarding
     if (user.isOnboarded === false) {
       this.stopAirflowSimulation();
-      appRoot.innerHTML = Views.renderOnboarding(2);
+      this.prepareOnboardingForUser(user);
+      appRoot.innerHTML = Views.renderOnboarding(this.onboardingStep);
       this.attachOnboardingEvents();
       return;
     }
@@ -108,6 +145,273 @@ const App = {
       this.refreshDevicesFromBackend();
     } else if (State.activeView === 'analytics') {
       this.renderAnalyticsChart();
+    }
+  },
+
+  prepareOnboardingForUser(user) {
+    const userId = String(user.id);
+    if (this.onboardingUserId === userId) return;
+    const savedSetup = API.getCachedAccountSetup();
+    this.onboardingUserId = userId;
+    this.onboardingStep = 1;
+    this.onboardingDevices = savedSetup?.devices || {
+      window: false,
+      ventilation: false,
+      purifier: false
+    };
+    this.onboardingPreferences = savedSetup?.preferences || null;
+    this.onboardingLocation = savedSetup?.location || null;
+    this.onboardingOutdoorAirQuality = savedSetup?.outdoorAirQuality || null;
+  },
+
+  setAuthenticatedUser(user) {
+    State.user = user;
+    State.rooms = API.getRooms();
+    State.activeRoomId = API.getActiveRoomId();
+    Chatbot.setAccount(user?.id ?? null);
+  },
+
+  buildOnboardingSetup(setupCompleted = false) {
+    return {
+      setupCompleted,
+      rooms: API.getRooms(),
+      devices: { ...this.onboardingDevices },
+      preferences: this.onboardingPreferences
+        ? { ...this.onboardingPreferences }
+        : null,
+      location: this.onboardingLocation
+        ? { ...this.onboardingLocation }
+        : null,
+      outdoorAirQuality: this.onboardingOutdoorAirQuality
+        ? { ...this.onboardingOutdoorAirQuality }
+        : null
+    };
+  },
+
+  async persistOnboardingDraft() {
+    const setup = this.buildOnboardingSetup(false);
+    const userId = this.onboardingUserId;
+    const save = this.onboardingSaveQueue
+      .catch(() => {})
+      .then(() => {
+        if (!userId || String(State.user?.id) !== userId || this.onboardingUserId !== userId) {
+          throw new Error('The signed-in account changed before setup could be saved.');
+        }
+        return API.saveAccountSetup(setup);
+      });
+    this.onboardingSaveQueue = save;
+    return save;
+  },
+
+  updateOnboardingLocationDisplay() {
+    const locationSummary = document.getElementById('onboarding-location-summary');
+    if (locationSummary) {
+      if (!this.onboardingLocation) {
+        locationSummary.textContent = 'No location selected.';
+      } else {
+        const location = this.onboardingLocation;
+        const gpsAccuracy = location.source === 'gps' && Number.isFinite(location.accuracy)
+          ? ` (±${Math.round(location.accuracy)} m)`
+          : '';
+        locationSummary.textContent =
+          `${location.placeName || (location.source === 'gps' ? 'GPS-detected location' : 'Manually entered location')}: ` +
+          `${location.source === 'gps' ? 'GPS-detected' : 'Manually entered'}: ` +
+          `${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}${gpsAccuracy} · ` +
+          `recorded ${new Date(location.recordedAt).toLocaleString()}`;
+      }
+    }
+    const airQualitySummary = document.getElementById('onboarding-outdoor-aqi');
+    if (airQualitySummary) {
+      const airQuality = this.onboardingOutdoorAirQuality;
+      airQualitySummary.textContent = airQuality
+        ? `Outdoor AQI: ${airQuality.aqi} (${airQuality.category || 'current'}) · ${airQuality.placeName || this.onboardingLocation?.placeName || 'Saved location'} · ${airQuality.unit} · ${airQuality.source} · updated ${new Date(airQuality.lastUpdated).toLocaleString()}`
+        : 'Outdoor AQI unavailable.';
+    }
+    const retryButton = document.getElementById('btn-onboarding-retry-aqi');
+    if (retryButton) retryButton.disabled = !this.onboardingLocation;
+  },
+
+  async requestCurrentLocation() {
+    const feedback = document.getElementById('onboarding-location-feedback');
+    const showFeedback = message => {
+      if (feedback) feedback.textContent = message;
+    };
+    if (!window.isSecureContext) {
+      showFeedback('Location requires a secure page. Use localhost during development or HTTPS.');
+      return;
+    }
+    if (!navigator.geolocation) {
+      showFeedback('This browser does not provide location access. Enter coordinates manually below.');
+      return;
+    }
+
+    showFeedback('Requesting location permission from your browser…');
+    return new Promise(resolve => {
+      navigator.geolocation.getCurrentPosition(async position => {
+        const location = {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracy: position.coords.accuracy,
+          recordedAt: new Date().toISOString(),
+          source: 'gps',
+          placeName: `Current location (${position.coords.latitude.toFixed(5)}, ${position.coords.longitude.toFixed(5)})`
+        };
+        this.onboardingLocation = location;
+        this.onboardingOutdoorAirQuality = null;
+        this.updateOnboardingLocationDisplay();
+        try {
+          let placeNameNotice = '';
+          try {
+            const resolved = await API.reverseGeocodeLocation(
+              location.latitude,
+              location.longitude
+            );
+            location.placeName = resolved.placeName;
+          } catch (error) {
+            placeNameNotice = ` Place name lookup unavailable: ${error.message}`;
+          }
+          await this.persistOnboardingDraft();
+          this.updateOnboardingLocationDisplay();
+          showFeedback(`GPS location saved (accuracy ±${Math.round(location.accuracy)} m).${placeNameNotice} Retrieving outdoor air quality…`);
+          await this.refreshOutdoorAirQuality();
+          resolve(true);
+        } catch (error) {
+          showFeedback(`Location was detected but could not be saved: ${error.message}`);
+          resolve(false);
+        }
+      }, error => {
+        const message = error.code === 1
+          ? 'Location permission was denied. Allow access in browser settings or enter coordinates manually.'
+          : error.code === 2
+            ? 'Your location is unavailable. Retry or enter coordinates manually.'
+            : 'Location request timed out. Retry or enter coordinates manually.';
+        showFeedback(message);
+        resolve(false);
+      }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+    });
+  },
+
+  async saveManualLocation() {
+    const latitudeInput = document.getElementById('onboarding-manual-latitude');
+    const longitudeInput = document.getElementById('onboarding-manual-longitude');
+    const feedback = document.getElementById('onboarding-location-feedback');
+    const latitude = Number(latitudeInput?.value);
+    const longitude = Number(longitudeInput?.value);
+    if (
+      latitudeInput?.value === '' ||
+      longitudeInput?.value === '' ||
+      !Number.isFinite(latitude) ||
+      latitude < -90 ||
+      latitude > 90 ||
+      !Number.isFinite(longitude) ||
+      longitude < -180 ||
+      longitude > 180
+    ) {
+      if (feedback) feedback.textContent = 'Enter a valid latitude (-90 to 90) and longitude (-180 to 180).';
+      return;
+    }
+    this.onboardingLocation = {
+      latitude,
+      longitude,
+      accuracy: null,
+      recordedAt: new Date().toISOString(),
+      source: 'manual',
+      placeName: `Coordinates (${latitude.toFixed(5)}, ${longitude.toFixed(5)})`
+    };
+    this.onboardingOutdoorAirQuality = null;
+    this.updateOnboardingLocationDisplay();
+    try {
+      await this.persistOnboardingDraft();
+      if (feedback) feedback.textContent = 'Coordinates saved as manually entered. Retrieving outdoor air quality…';
+      await this.refreshOutdoorAirQuality();
+    } catch (error) {
+      if (feedback) feedback.textContent = `Coordinates could not be saved: ${error.message}`;
+    }
+  },
+
+  async refreshOutdoorAirQuality() {
+    const feedback = document.getElementById('onboarding-location-feedback');
+    if (!this.onboardingLocation) {
+      if (feedback) feedback.textContent = 'Select a location before requesting outdoor AQI.';
+      return;
+    }
+    this.onboardingOutdoorAirQuality = null;
+    try {
+      const airQuality = await API.lookupOutdoorAirQuality();
+      this.onboardingOutdoorAirQuality = airQuality;
+      this.updateOnboardingLocationDisplay();
+      await this.persistOnboardingDraft();
+      if (feedback) feedback.textContent = '';
+    } catch (error) {
+      this.updateOnboardingLocationDisplay();
+      if (feedback) {
+        feedback.textContent = `Air quality unavailable: ${error.message}. You can retry; setup can still continue.`;
+      }
+    }
+  },
+
+  async searchOnboardingLocations() {
+    const query = document.getElementById('onboarding-location-search')?.value.trim();
+    const feedback = document.getElementById('onboarding-location-feedback');
+    const resultsContainer = document.getElementById('onboarding-location-results');
+    if (!query) {
+      if (feedback) feedback.textContent = 'Enter an Indian city, area, or address to search.';
+      return;
+    }
+    if (feedback) feedback.textContent = 'Searching Google Maps for Indian locations…';
+    if (resultsContainer) resultsContainer.textContent = '';
+    try {
+      const locations = await API.searchIndianLocations(query);
+      this.onboardingLocationSearchResults = locations;
+      if (!locations.length) {
+        if (feedback) feedback.textContent = 'No matching locations found. Try a different search or enter coordinates manually.';
+        return;
+      }
+      if (resultsContainer) {
+        resultsContainer.innerHTML = locations.map((location, index) =>
+          `<button type="button" class="btn btn-outline onboarding-location-result" data-location-index="${index}">${Utils.escapeHtml(location.placeName)}</button>`
+        ).join('');
+        resultsContainer.querySelectorAll('[data-location-index]').forEach(button => {
+            button.addEventListener('click', async () => {
+            const location = this.onboardingLocationSearchResults[Number(button.dataset.locationIndex)];
+              await this.selectOnboardingLocation(location);
+          });
+        });
+      }
+      if (feedback) feedback.textContent = 'Select a result to save it as your account location.';
+    } catch (error) {
+      if (feedback) {
+        feedback.textContent = `Google Maps location search unavailable: ${error.message} Use the manual latitude/longitude fields below.`;
+      }
+    }
+  },
+
+  async selectOnboardingLocation(result) {
+    if (!result || !Number.isFinite(result.latitude) || !Number.isFinite(result.longitude)) {
+      const feedback = document.getElementById('onboarding-location-feedback');
+      if (feedback) feedback.textContent = 'That location result is invalid. Search again or enter coordinates manually.';
+      return;
+    }
+    this.onboardingLocation = {
+      latitude: result.latitude,
+      longitude: result.longitude,
+      accuracy: null,
+      recordedAt: new Date().toISOString(),
+      source: 'manual',
+      placeName: result.placeName
+    };
+    this.onboardingOutdoorAirQuality = null;
+    this.updateOnboardingLocationDisplay();
+    try {
+      await this.persistOnboardingDraft();
+      const resultsContainer = document.getElementById('onboarding-location-results');
+      if (resultsContainer) resultsContainer.textContent = '';
+      const feedback = document.getElementById('onboarding-location-feedback');
+      if (feedback) feedback.textContent = 'Location saved. Retrieving outdoor air quality…';
+      await this.refreshOutdoorAirQuality();
+    } catch (error) {
+      const feedback = document.getElementById('onboarding-location-feedback');
+      if (feedback) feedback.textContent = `Location could not be saved: ${error.message}`;
     }
   },
 
@@ -1070,136 +1374,15 @@ const App = {
     }
   },
 
-  renderAnalyticsChart(timeframe = '24H') {
+  renderAnalyticsChart() {
     const canvas = document.getElementById('analytics-chart-canvas');
     if (!canvas) return;
-
-    const ctx = canvas.getContext('2d');
-    const dpr = window.devicePixelRatio || 1;
-    const rect = canvas.getBoundingClientRect();
-
-    canvas.width = (rect.width || 900) * dpr;
-    canvas.height = (rect.height || 300) * dpr;
-    ctx.scale(dpr, dpr);
-
-    const width = rect.width || 900;
-    const height = rect.height || 300;
-
-    // Generate mock realistic trend points based on selected metric
-    const metricSelect = document.getElementById('analytics-metric-select');
-    const metric = metricSelect ? metricSelect.value : 'indoorAQI';
-
-    let points = [];
-    let labels = [];
-
-    if (timeframe === '24H') {
-      labels = ['12 AM', '3 AM', '6 AM', '9 AM', '12 PM', '3 PM', '6 PM', '9 PM', 'Now'];
-      if (metric === 'indoorAQI') {
-        points = [32, 28, 30, 48, 62, 54, 42, 38, 36];
-      } else if (metric === 'co2') {
-        points = [580, 520, 540, 780, 890, 810, 720, 640, 620];
-      } else {
-        points = [75, 70, 85, 120, 135, 115, 110, 112, 110];
-      }
-    } else if (timeframe === '7D') {
-      labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-      if (metric === 'indoorAQI') points = [35, 42, 38, 52, 45, 30, 36];
-      else if (metric === 'co2') points = [620, 710, 680, 840, 790, 590, 640];
-      else points = [90, 115, 128, 140, 112, 85, 110];
-    } else {
-      labels = ['Week 1', 'Week 2', 'Week 3', 'Week 4'];
-      if (metric === 'indoorAQI') points = [38, 44, 40, 35];
-      else if (metric === 'co2') points = [660, 720, 690, 630];
-      else points = [105, 125, 118, 98];
+    const wrapper = canvas.parentElement;
+    if (wrapper) {
+      wrapper.innerHTML = '<p role="status">Account-specific sensor history is not available in this view yet.</p>';
     }
-
-    // Determine Min & Max bounds
-    const minVal = Math.min(...points) * 0.75;
-    const maxVal = Math.max(...points) * 1.25;
-
-    ctx.clearRect(0, 0, width, height);
-
-    const padLeft = 50;
-    const padRight = 30;
-    const padTop = 30;
-    const padBottom = 45;
-    const plotW = width - padLeft - padRight;
-    const plotH = height - padTop - padBottom;
-
-    // Grid lines & Y Axis Labels
-    ctx.strokeStyle = '#e5e7eb';
-    ctx.lineWidth = 1;
-    ctx.fillStyle = '#9ca3af';
-    ctx.font = '11px sans-serif';
-    ctx.textAlign = 'right';
-
-    const gridSteps = 4;
-    for (let i = 0; i <= gridSteps; i++) {
-      const y = padTop + (plotH / gridSteps) * i;
-      const val = Math.round(maxVal - (i / gridSteps) * (maxVal - minVal));
-
-      ctx.beginPath();
-      ctx.moveTo(padLeft, y);
-      ctx.lineTo(width - padRight, y);
-      ctx.stroke();
-
-      ctx.fillText(val, padLeft - 10, y + 4);
-    }
-
-    // X Axis Labels
-    ctx.textAlign = 'center';
-    const xStep = plotW / (points.length - 1);
-    labels.forEach((lbl, i) => {
-      const x = padLeft + i * xStep;
-      ctx.fillText(lbl, x, height - 15);
-    });
-
-    // Map data to coordinates
-    const coords = points.map((val, i) => {
-      const x = padLeft + i * xStep;
-      const y = padTop + plotH - ((val - minVal) / (maxVal - minVal)) * plotH;
-      return { x, y, val };
-    });
-
-    // Draw Smooth Spline Area
-    const gradient = ctx.createLinearGradient(0, padTop, 0, padTop + plotH);
-    gradient.addColorStop(0, 'rgba(21, 128, 61, 0.22)');
-    gradient.addColorStop(1, 'rgba(21, 128, 61, 0.01)');
-
-    ctx.beginPath();
-    ctx.moveTo(coords[0].x, coords[0].y);
-    for (let i = 0; i < coords.length - 1; i++) {
-      const cpX = (coords[i].x + coords[i + 1].x) / 2;
-      ctx.bezierCurveTo(cpX, coords[i].y, cpX, coords[i + 1].y, coords[i + 1].x, coords[i + 1].y);
-    }
-    ctx.lineTo(coords[coords.length - 1].x, padTop + plotH);
-    ctx.lineTo(coords[0].x, padTop + plotH);
-    ctx.closePath();
-    ctx.fillStyle = gradient;
-    ctx.fill();
-
-    // Draw Spline Line
-    ctx.beginPath();
-    ctx.moveTo(coords[0].x, coords[0].y);
-    for (let i = 0; i < coords.length - 1; i++) {
-      const cpX = (coords[i].x + coords[i + 1].x) / 2;
-      ctx.bezierCurveTo(cpX, coords[i].y, cpX, coords[i + 1].y, coords[i + 1].x, coords[i + 1].y);
-    }
-    ctx.strokeStyle = '#15803d';
-    ctx.lineWidth = 2.5;
-    ctx.lineCap = 'round';
-    ctx.stroke();
-
-    // Draw Points
-    coords.forEach(pt => {
-      ctx.beginPath();
-      ctx.arc(pt.x, pt.y, 4, 0, Math.PI * 2);
-      ctx.fillStyle = '#ffffff';
-      ctx.fill();
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = '#15803d';
-      ctx.stroke();
-    });
+    const dataStatus = document.getElementById('analytics-data-status');
+    if (dataStatus) dataStatus.textContent = 'History unavailable';
   },
 
   // -------------------------------------------------------------
@@ -1250,16 +1433,6 @@ const App = {
       });
     }
 
-    const btnReset = document.getElementById('btn-reset-demo-data');
-    if (btnReset) {
-      btnReset.addEventListener('click', () => {
-        localStorage.clear();
-        sessionStorage.clear();
-        State.init();
-        this.renderCurrentApplicationState();
-        Utils.showToast('Demo data successfully restored to defaults', 'success');
-      });
-    }
   },
 
   // -------------------------------------------------------------
@@ -1463,6 +1636,7 @@ const App = {
     const closeBtn = document.getElementById('btn-close-space-modal');
     const cancelBtn = document.getElementById('btn-cancel-space-modal');
     const form = document.getElementById('form-space-modal');
+    const formError = document.getElementById('space-modal-error');
 
     let currentStep = 1;
 
@@ -1481,6 +1655,17 @@ const App = {
     // Step switching function
     const goToStep = (stepNumber) => {
       if (stepNumber < 1 || stepNumber > 4) return;
+      if (stepNumber > currentStep + 1) return;
+      if (stepNumber > currentStep) {
+        const currentPane = document.getElementById(`space-step-pane-${currentStep}`);
+        const invalidInput = currentPane
+          ? Array.from(currentPane.querySelectorAll('input, select')).find(input => !input.checkValidity())
+          : null;
+        if (invalidInput) {
+          invalidInput.reportValidity();
+          return;
+        }
+      }
       currentStep = stepNumber;
 
       // Update stepper tabs
@@ -1607,44 +1792,66 @@ const App = {
     if (form) {
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const editId = form.dataset.editId;
-        const name = document.getElementById('room-input-name')?.value.trim() || 'New Space';
-        const type = document.getElementById('room-input-type')?.value || 'Room';
-        const length = parseFloat(document.getElementById('room-input-length')?.value) || 4.5;
-        const width = parseFloat(document.getElementById('room-input-width')?.value) || 3.0;
-        const ceilingHeight = parseFloat(document.getElementById('room-input-height')?.value) || 2.8;
-        const windowsCount = parseInt(document.getElementById('room-input-windows')?.value, 10) || 1;
-        const doorsCount = parseInt(document.getElementById('room-input-doors')?.value, 10) || 1;
-        const typicalOccupants = parseInt(document.getElementById('room-input-occupants')?.value, 10) || 2;
-
-        if (editId) {
-          await State.updateRoom(editId, {
-            name,
-            type,
-            length,
-            width,
-            area: Number((length * width).toFixed(1)),
-            ceilingHeight,
-            windowsCount,
-            doorsCount,
-            typicalOccupants
-          });
-          Utils.showToast(`Space "${name}" updated successfully`, 'success');
-        } else {
-          await State.addRoom({
-            name,
-            type,
-            length,
-            width,
-            ceilingHeight,
-            windowsCount,
-            doorsCount,
-            typicalOccupants
-          });
-          Utils.showToast(`Space "${name}" created successfully`, 'success');
+        if (formError) {
+          formError.textContent = '';
+          formError.style.display = 'none';
         }
+        if (!form.checkValidity()) {
+          form.reportValidity();
+          return;
+        }
+        const editId = form.dataset.editId;
+        const name = document.getElementById('room-input-name')?.value.trim();
+        const type = document.getElementById('room-input-type')?.value || 'Room';
+        const length = Number(document.getElementById('room-input-length').value);
+        const width = Number(document.getElementById('room-input-width').value);
+        const ceilingHeight = Number(document.getElementById('room-input-height').value);
+        const windowsCount = Number(document.getElementById('room-input-windows').value);
+        const doorsCount = Number(document.getElementById('room-input-doors').value);
+        const typicalOccupants = Number(document.getElementById('room-input-occupants').value);
 
-        closeModal();
+        try {
+          if (editId) {
+            await State.updateRoom(editId, {
+              name,
+              type,
+              length,
+              width,
+              area: Number((length * width).toFixed(1)),
+              ceilingHeight,
+              windowsCount,
+              doorsCount,
+              typicalOccupants
+            });
+            Utils.showToast(`Space "${name}" updated successfully`, 'success');
+          } else {
+            await State.addRoom({
+              name,
+              type,
+              length,
+              width,
+              ceilingHeight,
+              windowsCount,
+              doorsCount,
+              typicalOccupants,
+              deviceOptions: {
+                window: document.getElementById('device-opt-window').checked,
+                ventilation: document.getElementById('device-opt-vent').checked,
+                purifier: document.getElementById('device-opt-purifier').checked
+              }
+            });
+            Utils.showToast(`Space "${name}" created successfully`, 'success');
+          }
+
+          closeModal();
+        } catch (error) {
+          if (formError) {
+            formError.textContent = `Could not save this room: ${error.message}`;
+            formError.style.display = 'block';
+          } else {
+            throw error;
+          }
+        }
       });
     }
   },
@@ -1673,7 +1880,11 @@ const App = {
     if (confirmBtn) {
       confirmBtn.addEventListener('click', async () => {
         await API.logout();
+        Chatbot.clearHistory();
         State.user = null;
+        State.rooms = [];
+        State.activeRoomId = null;
+        this.onboardingUserId = null;
         closeModal();
         this.renderCurrentApplicationState();
         Utils.showToast('Signed out successfully', 'info');
@@ -1700,7 +1911,7 @@ const App = {
           try {
             Utils.showToast('Connecting to your Google Account...', 'info', 1200);
             const user = await API.loginWithGoogleCredential(response.credential);
-            State.user = user;
+            this.setAuthenticatedUser(user);
             State.activeView = 'dashboard';
             window.location.hash = 'dashboard';
             this.showDashboardEntranceAnimation = true;
@@ -1863,7 +2074,7 @@ const App = {
       }
     };
 
-    // Helper: Open Interactive Google Account Picker Modal
+    // Keep the existing entry point, but do not fabricate a Google-authenticated user.
     const openSimulatedGooglePicker = () => {
       let modalWrapper = document.getElementById('google-modal-container');
       if (!modalWrapper) {
@@ -1875,8 +2086,6 @@ const App = {
 
       const backdrop = document.getElementById('google-auth-backdrop');
       const closeBtn = document.getElementById('btn-close-google-auth');
-      const acc1 = document.getElementById('btn-select-google-account-1');
-      const acc2 = document.getElementById('btn-select-google-account-2');
 
       const closeGoogleModal = () => {
         if (modalWrapper) modalWrapper.innerHTML = '';
@@ -1886,84 +2095,6 @@ const App = {
       if (backdrop) {
         backdrop.addEventListener('click', (e) => {
           if (e.target === backdrop) closeGoogleModal();
-        });
-      }
-
-      const completeGoogleLogin = async (profile) => {
-        try {
-          if (acc1) acc1.style.pointerEvents = 'none';
-          if (acc2) acc2.style.pointerEvents = 'none';
-          Utils.showToast('Connecting to Google Identity Services...', 'info', 1400);
-
-          const user = await API.loginWithGoogle(profile);
-          State.user = user;
-          closeGoogleModal();
-
-          // Navigate directly to dashboard with sleek animated telemetry loading
-          State.activeView = 'dashboard';
-          window.location.hash = 'dashboard';
-          this.showDashboardEntranceAnimation = true;
-          this.renderCurrentApplicationState();
-          Utils.showToast(`Signed in as ${user.name} (${user.email})`, 'success');
-        } catch (err) {
-          Utils.showToast(err.message, 'warning');
-        }
-      };
-
-      const btnToggleCustom = document.getElementById('btn-toggle-custom-google');
-      const formCustomGoogle = document.getElementById('form-custom-google-auth');
-
-      if (btnToggleCustom && formCustomGoogle) {
-        btnToggleCustom.addEventListener('click', () => {
-          const isHidden = formCustomGoogle.style.display === 'none';
-          formCustomGoogle.style.display = isHidden ? 'block' : 'none';
-          if (isHidden) {
-            document.getElementById('custom-google-email')?.focus();
-          }
-        });
-
-        formCustomGoogle.addEventListener('submit', (e) => {
-          e.preventDefault();
-          const emailInput = document.getElementById('custom-google-email');
-          const nameInput = document.getElementById('custom-google-name');
-          const email = emailInput ? emailInput.value.trim() : '';
-          const name = nameInput && nameInput.value.trim() ? nameInput.value.trim() : (email.split('@')[0].replace('.', ' ').replace(/^./, s => s.toUpperCase()));
-          if (!email) return;
-
-          completeGoogleLogin({
-            id: 'usr_google_' + Date.now(),
-            name: name,
-            email: email,
-            authProvider: 'google',
-            isOnboarded: true,
-            lastLogin: new Date().toISOString()
-          });
-        });
-      }
-
-      if (acc1) {
-        acc1.addEventListener('click', () => {
-          completeGoogleLogin({
-            id: 'usr_google_divam',
-            name: 'Divam Malik',
-            email: 'divam.malik@gmail.com',
-            authProvider: 'google',
-            isOnboarded: true,
-            lastLogin: new Date().toISOString()
-          });
-        });
-      }
-
-      if (acc2) {
-        acc2.addEventListener('click', () => {
-          completeGoogleLogin({
-            id: 'usr_google_dev',
-            name: 'Breathe Clean Dev',
-            email: 'engineering@breatheclean.io',
-            authProvider: 'google',
-            isOnboarded: true,
-            lastLogin: new Date().toISOString()
-          });
         });
       }
     };
@@ -2014,7 +2145,7 @@ const App = {
 
         try {
           const user = await API.login(email, password, remember);
-          State.user = user;
+          this.setAuthenticatedUser(user);
           // Direct straight to dashboard with animated data loading
           State.activeView = 'dashboard';
           window.location.hash = 'dashboard';
@@ -2159,7 +2290,9 @@ const App = {
         try {
           const user = await API.signup(name, email, pw);
           API.updateUser(user);
-          State.user = user;
+          this.setAuthenticatedUser(user);
+          this.onboardingStep = 1;
+          this.onboardingUserId = null;
           this.renderCurrentApplicationState();
         } catch (err) {
           showSignupError(err.message || 'Unable to create your account. Please try again.');
@@ -2229,18 +2362,133 @@ const App = {
     const backBtn = document.getElementById('btn-onboarding-back');
     const addRoomBtn = document.getElementById('btn-onboarding-add-room');
     const finishBtn = document.getElementById('btn-onboarding-finish');
+    const errorEl = document.getElementById('onboarding-error');
+
+    const showError = (message) => {
+      if (!errorEl) return;
+      errorEl.textContent = message;
+      errorEl.style.display = 'block';
+    };
+    const clearError = () => {
+      if (!errorEl) return;
+      errorEl.textContent = '';
+      errorEl.style.display = 'none';
+    };
+
+    document.querySelectorAll('[data-onboarding-device]').forEach(input => {
+      input.addEventListener('change', () => {
+        this.onboardingDevices[input.dataset.onboardingDevice] = input.checked;
+        clearError();
+        this.persistOnboardingDraft().catch(error => showError(`Setup draft could not be saved: ${error.message}`));
+      });
+    });
+
+    const notificationsInput = document.getElementById('onboarding-notifications');
+    const temperatureInput = document.getElementById('onboarding-temp-unit');
+    const persistSelectedPreferences = () => {
+      if (
+        ['celsius', 'fahrenheit'].includes(this.onboardingPreferences?.tempUnit) &&
+        typeof this.onboardingPreferences?.notificationsEnabled === 'boolean'
+      ) {
+        this.persistOnboardingDraft().catch(error => showError(`Setup draft could not be saved: ${error.message}`));
+      }
+    };
+    if (notificationsInput) {
+      notificationsInput.addEventListener('change', () => {
+        this.onboardingPreferences = {
+          tempUnit: temperatureInput?.value || '',
+          notificationsEnabled: notificationsInput.value === 'enabled'
+            ? true
+            : notificationsInput.value === 'disabled'
+              ? false
+              : null
+        };
+        clearError();
+        persistSelectedPreferences();
+      });
+    }
+    if (temperatureInput) {
+      temperatureInput.addEventListener('change', () => {
+        this.onboardingPreferences = {
+          tempUnit: temperatureInput.value,
+          notificationsEnabled: notificationsInput?.value === 'enabled'
+            ? true
+            : notificationsInput?.value === 'disabled'
+              ? false
+              : null
+        };
+        clearError();
+        persistSelectedPreferences();
+      });
+    }
+
+    const gpsButton = document.getElementById('btn-onboarding-use-location');
+    gpsButton?.addEventListener('click', () => this.requestCurrentLocation());
+    const locationSearchButton = document.getElementById('btn-onboarding-search-location');
+    locationSearchButton?.addEventListener('click', () => this.searchOnboardingLocations());
+    const manualLocationButton = document.getElementById('btn-onboarding-save-manual-location');
+    manualLocationButton?.addEventListener('click', () => this.saveManualLocation());
+    const retryAqiButton = document.getElementById('btn-onboarding-retry-aqi');
+    retryAqiButton?.addEventListener('click', () => this.refreshOutdoorAirQuality());
 
     if (continueBtn) {
-      continueBtn.addEventListener('click', () => {
-        const root = document.getElementById('app-root');
-        root.innerHTML = Views.renderOnboarding(5); // Ready step
-        this.attachOnboardingEvents();
+      continueBtn.addEventListener('click', async () => {
+        clearError();
+        if (this.onboardingStep === 1 && (!State.user || !State.user.email)) {
+          showError('A valid account is required to continue.');
+          return;
+        }
+        if (this.onboardingStep === 2 && API.getRooms().length === 0) {
+          showError('Add at least one room before continuing.');
+          return;
+        }
+        if (this.onboardingStep === 3 && !Object.values(this.onboardingDevices).some(Boolean)) {
+          showError('Select at least one device type before continuing.');
+          return;
+        }
+        if (
+          this.onboardingStep === 4 &&
+          !this.onboardingPreferences
+        ) {
+          this.onboardingPreferences = {
+            tempUnit: temperatureInput?.value || '',
+            notificationsEnabled: notificationsInput?.value === 'enabled'
+              ? true
+              : notificationsInput?.value === 'disabled'
+                ? false
+                : null
+          };
+        }
+        if (
+          this.onboardingStep === 4 &&
+          (!this.onboardingPreferences ||
+            !['celsius', 'fahrenheit'].includes(this.onboardingPreferences.tempUnit) ||
+            typeof this.onboardingPreferences.notificationsEnabled !== 'boolean')
+        ) {
+          showError('Choose valid notification and temperature preferences.');
+          return;
+        }
+        if (this.onboardingStep === 4 && !this.onboardingLocation) {
+          showError('Choose a GPS or manually entered location before continuing.');
+          return;
+        }
+        if (this.onboardingStep === 4) {
+          try {
+            await this.persistOnboardingDraft();
+          } catch (error) {
+            showError(`Setup draft could not be saved: ${error.message}`);
+            return;
+          }
+        }
+        this.renderOnboardingStep(this.onboardingStep + 1);
       });
     }
 
     if (backBtn) {
       backBtn.addEventListener('click', () => {
-        Utils.showToast('Account already calibrated', 'info');
+        if (this.onboardingStep > 1) {
+          this.renderOnboardingStep(this.onboardingStep - 1);
+        }
       });
     }
 
@@ -2251,12 +2499,91 @@ const App = {
     }
 
     if (finishBtn) {
-      finishBtn.addEventListener('click', () => {
-        API.updateUser({ isOnboarded: true });
-        State.user = API.getCurrentUser();
-        this.renderCurrentApplicationState();
-        Utils.showToast('Setup complete! Live environmental monitoring active.', 'success');
+      finishBtn.addEventListener('click', async () => {
+        clearError();
+        if (!State.user || !State.user.email) {
+          this.renderOnboardingStep(1, 'A valid account is required to complete setup.');
+          return;
+        }
+        const rooms = API.getRooms();
+        if (rooms.length === 0) {
+          this.renderOnboardingStep(2, 'Add at least one room before completing setup.');
+          return;
+        }
+        if (!Object.values(this.onboardingDevices).some(Boolean)) {
+          this.renderOnboardingStep(3, 'Select at least one device type before completing setup.');
+          return;
+        }
+        if (
+          !this.onboardingPreferences ||
+          !['celsius', 'fahrenheit'].includes(this.onboardingPreferences.tempUnit) ||
+          typeof this.onboardingPreferences.notificationsEnabled !== 'boolean'
+        ) {
+          this.renderOnboardingStep(4, 'Choose valid preferences before completing setup.');
+          return;
+        }
+        if (!this.onboardingLocation) {
+          this.renderOnboardingStep(4, 'Choose a GPS or manually entered location before completing setup.');
+          return;
+        }
+
+        try {
+          await this.onboardingSaveQueue.catch(() => {});
+          const configuredRooms = rooms.map(room => ({
+            ...room,
+            devices: (room.devices || []).filter(device => this.onboardingDevices[device.type])
+          }));
+          const settings = {
+            ...API.getSettings(),
+            ...this.onboardingPreferences,
+            setupDevices: { ...this.onboardingDevices }
+          };
+          API.saveRooms(configuredRooms);
+          API.saveSettings(settings);
+          const completeSetup = this.buildOnboardingSetup(true);
+          completeSetup.rooms = configuredRooms;
+          completeSetup.preferences = { ...this.onboardingPreferences };
+          const accountSave = await API.saveAccountSetup(completeSetup);
+          if (accountSave.setupComplete !== true) {
+            throw new Error('The backend did not confirm setup completion.');
+          }
+          const savedRooms = API.getRooms();
+          const savedSettings = API.getSettings();
+          if (
+            savedRooms.length !== configuredRooms.length ||
+            savedRooms.some((room, index) =>
+              room.id !== configuredRooms[index].id ||
+              JSON.stringify(room.devices) !== JSON.stringify(configuredRooms[index].devices)
+            ) ||
+            JSON.stringify(savedSettings.setupDevices) !== JSON.stringify(this.onboardingDevices) ||
+            savedSettings.tempUnit !== this.onboardingPreferences.tempUnit ||
+            savedSettings.notificationsEnabled !== this.onboardingPreferences.notificationsEnabled
+          ) {
+            throw new Error('Setup could not be verified in this browser storage.');
+          }
+          State.rooms = savedRooms;
+          State.user = API.updateUser({ isOnboarded: true });
+          this.renderCurrentApplicationState();
+          Utils.showToast('Setup saved to your account. Welcome to the dashboard.', 'success');
+        } catch (error) {
+          showError(`Setup was not saved: ${error.message}`);
+        }
       });
+    }
+  },
+
+  renderOnboardingStep(step, errorMessage = '') {
+    this.onboardingStep = Math.max(1, Math.min(5, step));
+    const root = document.getElementById('app-root');
+    if (!root) return;
+    root.innerHTML = Views.renderOnboarding(this.onboardingStep);
+    this.attachOnboardingEvents();
+    if (errorMessage) {
+      const errorEl = document.getElementById('onboarding-error');
+      if (errorEl) {
+        errorEl.textContent = errorMessage;
+        errorEl.style.display = 'block';
+      }
     }
   }
 };

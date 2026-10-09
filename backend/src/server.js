@@ -10,6 +10,7 @@ const { allowedValues } = require("./data/deviceState");
 const { thresholds } = require("./services/environmentRules");
 const { restorePersistedState } = require("./data/restorePersistedState");
 const authRoutes = require("./routes/authRoutes");
+const accountRoutes = require("./routes/accountRoutes");
 const { createSessionMiddleware } = require("./auth/sessionMiddleware");
 
 restorePersistedState();
@@ -37,6 +38,7 @@ app.use("/api/devices", deviceRoutes);
 app.use("/api/decision", decisionRoutes);
 app.use("/api/simulation", simulationRoutes);
 app.use("/api/auth", authRoutes);
+app.use("/api/account", accountRoutes);
 
 app.use((_request, response) => {
   response.status(404).json({ success: false, error: "Route not found" });
@@ -51,7 +53,7 @@ app.use((error, _request, response, _next) => {
   return response.status(500).json({ success: false, error: "Internal server error" });
 });
 
-const port = Number(process.env.PORT) || 5000;
+const port = Number(process.env.PORT) || 5001;
 app.listen(port, () => {
   console.log(`Breathe Clean backend listening at http://localhost:${port}`);
 });

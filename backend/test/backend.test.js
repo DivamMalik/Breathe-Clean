@@ -36,6 +36,7 @@ const decisionRoutes = require("../src/routes/decisionRoutes");
 const deviceRoutes = require("../src/routes/deviceRoutes");
 const simulationRoutes = require("../src/routes/simulationRoutes");
 const authRoutes = require("../src/routes/authRoutes");
+const accountRoutes = require("../src/routes/accountRoutes");
 const { createSessionMiddleware } = require("../src/auth/sessionMiddleware");
 const { requireAuthenticatedUser } = require("../src/auth/authMiddleware");
 const { generateDecision } = require("../src/services/decisionEngine");
@@ -66,6 +67,9 @@ function clearDatabase() {
     DELETE FROM sensor_readings;
     DELETE FROM password_reset_tokens;
     DELETE FROM user_sessions;
+    DELETE FROM user_aqi_history;
+    DELETE FROM user_environment_state;
+    DELETE FROM user_setups;
     DELETE FROM users;
   `);
 }
@@ -133,7 +137,30 @@ async function requestJson(path, options = {}) {
     },
     body: options.body === undefined ? undefined : JSON.stringify(options.body)
   });
-  return { status: response.status, body: await response.json() };
+  return {
+    status: response.status,
+    body: await response.json(),
+    headers: response.headers
+  };
+}
+
+async function registerAndLogin(email) {
+  const password = "correct horse battery staple";
+  const registration = await requestJson("/auth/register", {
+    method: "POST",
+    body: { email, password }
+  });
+  assert.equal(registration.status, 201);
+  const login = await fetch(`${baseUrl}/auth/login`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email, password })
+  });
+  assert.equal(login.status, 200);
+  return {
+    userId: registration.body.user.id,
+    cookie: login.headers.get("set-cookie").split(";", 1)[0]
+  };
 }
 
 beforeEach(async () => {
@@ -142,6 +169,7 @@ beforeEach(async () => {
   app.use(express.json());
   app.use(createSessionMiddleware());
   app.use("/api/auth", authRoutes);
+  app.use("/api/account", accountRoutes);
   app.get("/api/test/private", requireAuthenticatedUser, (request, response) => {
     response.json({ success: true, user: request.user });
   });
@@ -181,7 +209,8 @@ test("database is initialized at the configured path with all persistence tables
     SELECT name FROM sqlite_master
     WHERE type = 'table' AND name IN (
       'sensor_readings', 'applied_device_states', 'decision_history',
-      'users', 'user_sessions', 'password_reset_tokens'
+      'users', 'user_sessions', 'password_reset_tokens', 'user_setups',
+      'user_environment_state', 'user_aqi_history'
     )
     ORDER BY name
   `).all().map((row) => row.name);
@@ -190,7 +219,10 @@ test("database is initialized at the configured path with all persistence tables
     "decision_history",
     "password_reset_tokens",
     "sensor_readings",
+    "user_aqi_history",
+    "user_environment_state",
     "user_sessions",
+    "user_setups",
     "users"
   ]);
 });
@@ -205,14 +237,66 @@ test("registration stores a normalized email and password hash, not the password
   assert.equal(response.status, 201);
   assert.deepEqual(response.body, {
     success: true,
-    user: { id: 1, email: "person@example.com" }
+    user: { id: 1, email: "person@example.com", name: null }
   });
+  assert.match(response.headers.get("set-cookie"), /HttpOnly/i);
+  assert.match(response.headers.get("set-cookie"), /SameSite=Lax/i);
   assert.equal(JSON.stringify(response.body).includes(password), false);
   const savedUser = getUserByEmail("person@example.com");
   assert.equal(savedUser.email, "person@example.com");
   assert.notEqual(savedUser.password_hash, password);
   assert.match(savedUser.password_hash, /^\$2[aby]\$/);
   assert.ok(savedUser.createdAt);
+});
+
+test("new accounts receive a clean, incomplete setup record", async () => {
+  const registration = await requestJson("/auth/register", {
+    method: "POST",
+    body: { email: "clean-setup@example.com", password: "correct horse battery staple" }
+  });
+  assert.equal(registration.status, 201);
+
+  const setup = database.prepare(
+    "SELECT setup_json FROM user_setups WHERE user_id = ?"
+  ).get(registration.body.user.id);
+  assert.deepEqual(JSON.parse(setup.setup_json), {
+    setupCompleted: false,
+    rooms: [],
+    devices: { window: false, ventilation: false, purifier: false },
+    preferences: null,
+    location: null,
+    outdoorAirQuality: null
+  });
+  const environment = database.prepare(
+    "SELECT sensor_json, device_json, decision_json FROM user_environment_state WHERE user_id = ?"
+  ).get(registration.body.user.id);
+  assert.deepEqual(environment, {
+    sensor_json: null,
+    device_json: null,
+    decision_json: null
+  });
+  assert.equal(database.prepare(
+    "SELECT COUNT(*) AS count FROM user_aqi_history WHERE user_id = ?"
+  ).get(registration.body.user.id).count, 0);
+});
+
+test("registration stores the submitted account name and creates its authenticated session", async () => {
+  const response = await requestJson("/auth/register", {
+    method: "POST",
+    body: {
+      name: "Test Account",
+      email: "named@example.com",
+      password: "correct horse battery staple"
+    }
+  });
+  assert.equal(response.status, 201);
+  assert.equal(response.body.user.name, "Test Account");
+  assert.match(response.headers.get("set-cookie"), /breathe\.sid=/);
+  const sessionCount = database.prepare(
+    "SELECT COUNT(*) AS count FROM user_sessions"
+  ).get().count;
+  assert.equal(sessionCount, 1);
+  assert.equal(getUserByEmail("named@example.com").name, "Test Account");
 });
 
 test("registration rejects duplicate emails after normalization", async () => {
@@ -239,6 +323,8 @@ test("registration rejects invalid credentials and unexpected fields", async () 
     { email: "person@example.com" },
     { email: "person@example.com", password: "short" },
     { email: "person@example.com", password: `${"a".repeat(71)}é` },
+    { name: 42, email: "person@example.com", password: "correct horse battery staple" },
+    { name: "   ", email: "person@example.com", password: "correct horse battery staple" },
     { email: "person@example.com", password: "correct horse battery staple", role: "admin" }
   ];
 
@@ -278,7 +364,8 @@ test("login rejects incorrect passwords and authenticates valid credentials", as
     success: true,
     user: {
       id: registration.body.user.id,
-      email: "person@example.com"
+      email: "person@example.com",
+      name: null
     }
   });
   assert.equal(JSON.stringify(correct.body).includes("password_hash"), false);
@@ -420,13 +507,308 @@ test("login sets HttpOnly SameSite cookie and persists authenticated session", a
   assert.deepEqual((await authenticated.json()).user, {
     id: registration.body.user.id,
     email: "person@example.com",
+    name: null,
     createdAt: getUserByEmail("person@example.com").createdAt
   });
 
   const storedSessions = database.prepare(
     "SELECT COUNT(*) AS count FROM user_sessions"
   ).get().count;
-  assert.equal(storedSessions, 1);
+  assert.equal(storedSessions, 2);
+});
+
+test("account setup is isolated to the authenticated user and rejects client-invented AQI", async () => {
+  const first = await registerAndLogin("first-setup@example.com");
+  const second = await registerAndLogin("second-setup@example.com");
+  const setup = {
+    setupCompleted: true,
+    rooms: [{ id: "room-one", name: "Office", devices: [{ type: "window" }] }],
+    devices: { window: true, ventilation: false, purifier: false },
+    preferences: { tempUnit: "celsius", notificationsEnabled: true },
+    location: {
+      latitude: 37.7749,
+      longitude: -122.4194,
+      accuracy: null,
+      recordedAt: new Date().toISOString(),
+      source: "manual",
+      placeName: "San Francisco, CA"
+    },
+    outdoorAirQuality: null
+  };
+  const saved = await requestJson("/account/setup", {
+    method: "PUT",
+    headers: { cookie: first.cookie },
+    body: setup
+  });
+  assert.equal(saved.status, 200);
+  assert.equal(saved.body.setupComplete, true);
+
+  const secondSetup = await requestJson("/account/setup?userId=1", {
+    headers: { cookie: second.cookie }
+  });
+  assert.equal(secondSetup.status, 200);
+  assert.equal(secondSetup.body.setup.rooms.length, 0);
+  assert.equal(secondSetup.body.setup.setupCompleted, false);
+
+  const spoofed = await requestJson("/account/setup", {
+    method: "PUT",
+    headers: { cookie: second.cookie },
+    body: { ...setup, userId: first.userId }
+  });
+  assert.equal(spoofed.status, 400);
+  const firstSetup = await requestJson("/account/setup", {
+    headers: { cookie: first.cookie }
+  });
+  assert.deepEqual(firstSetup.body.setup.rooms, setup.rooms);
+
+  const inventedAqi = await requestJson("/account/setup", {
+    method: "PUT",
+    headers: { cookie: first.cookie },
+    body: {
+      ...setup,
+      outdoorAirQuality: {
+        aqi: 1,
+        category: "Good",
+        source: "Google Maps Platform Air Quality API (Universal AQI)",
+        unit: "AQI index (unitless)",
+        lastUpdated: new Date().toISOString(),
+        latitude: 37.7749,
+        longitude: -122.4194
+      }
+    }
+  });
+  assert.equal(inventedAqi.status, 400);
+  assert.match(inventedAqi.body.error, /configured air-quality provider/);
+});
+
+test("provider configuration failure returns unavailable without storing an AQI", async () => {
+  const account = await registerAndLogin("provider-failure@example.com");
+  const location = await requestJson("/account/setup", {
+    method: "PUT",
+    headers: { cookie: account.cookie },
+    body: {
+      setupCompleted: false,
+      rooms: [],
+      devices: { window: false, ventilation: false, purifier: false },
+      preferences: null,
+      location: {
+        latitude: 37.7749,
+        longitude: -122.4194,
+        accuracy: null,
+        recordedAt: new Date().toISOString(),
+        source: "manual",
+        placeName: "San Francisco, CA"
+      },
+      outdoorAirQuality: null
+    }
+  });
+  assert.equal(location.status, 200);
+  const previousApiKey = process.env.GOOGLE_MAPS_AIR_QUALITY_API_KEY;
+  delete process.env.GOOGLE_MAPS_AIR_QUALITY_API_KEY;
+  try {
+    const response = await requestJson("/account/outdoor-air-quality", {
+      method: "POST",
+      headers: { cookie: account.cookie },
+      body: { latitude: 0, longitude: 0 }
+    });
+    assert.equal(response.status, 503);
+    assert.match(response.body.error, /not configured/);
+  } finally {
+    if (previousApiKey === undefined) {
+      delete process.env.GOOGLE_MAPS_AIR_QUALITY_API_KEY;
+    } else {
+      process.env.GOOGLE_MAPS_AIR_QUALITY_API_KEY = previousApiKey;
+    }
+  }
+  const setup = await requestJson("/account/setup", {
+    headers: { cookie: account.cookie }
+  });
+  assert.equal(setup.body.setup.outdoorAirQuality, null);
+});
+
+test("provider AQI comes from a current provider response and is saved only for its account location", async () => {
+  const account = await registerAndLogin("provider-success@example.com");
+  const location = {
+    latitude: 37.7749,
+    longitude: -122.4194,
+    accuracy: null,
+    recordedAt: new Date().toISOString(),
+    source: "manual",
+    placeName: "San Francisco, CA"
+  };
+  const draft = await requestJson("/account/setup", {
+    method: "PUT",
+    headers: { cookie: account.cookie },
+    body: {
+      setupCompleted: false,
+      rooms: [],
+      devices: { window: false, ventilation: false, purifier: false },
+      preferences: null,
+      location,
+      outdoorAirQuality: null
+    }
+  });
+  assert.equal(draft.status, 200);
+
+  const previousApiKey = process.env.GOOGLE_MAPS_AIR_QUALITY_API_KEY;
+  const previousFetch = global.fetch;
+  process.env.GOOGLE_MAPS_AIR_QUALITY_API_KEY = "test-provider-key";
+  let providerRequest;
+  global.fetch = async (url, options) => {
+    if (!String(url).startsWith("https://airquality.googleapis.com/")) {
+      return previousFetch(url, options);
+    }
+    providerRequest = { url: String(url), options };
+    return {
+      ok: true,
+      async json() {
+        return { indexes: [{ code: "uaqi", aqi: 52, category: "Good" }] };
+      }
+    };
+  };
+  try {
+    const response = await requestJson("/account/outdoor-air-quality", {
+      method: "POST",
+      headers: { cookie: account.cookie },
+      body: { latitude: 0, longitude: 0 }
+    });
+    assert.equal(response.status, 200);
+    assert.equal(response.body.airQuality.aqi, 52);
+    assert.equal(response.body.airQuality.source, "Google Maps Platform Air Quality API (Universal AQI)");
+    assert.equal(providerRequest.options.method, "POST");
+    assert.deepEqual(JSON.parse(providerRequest.options.body), {
+      location: { latitude: location.latitude, longitude: location.longitude },
+      extraComputations: ["HEALTH_RECOMMENDATIONS"]
+    });
+
+    const savedSetup = await requestJson("/account/setup", {
+      headers: { cookie: account.cookie }
+    });
+    assert.equal(savedSetup.body.setup.outdoorAirQuality.aqi, 52);
+    assert.equal(savedSetup.body.setup.outdoorAirQuality.latitude, location.latitude);
+  } finally {
+    global.fetch = previousFetch;
+    if (previousApiKey === undefined) {
+      delete process.env.GOOGLE_MAPS_AIR_QUALITY_API_KEY;
+    } else {
+      process.env.GOOGLE_MAPS_AIR_QUALITY_API_KEY = previousApiKey;
+    }
+  }
+});
+
+test("new account sensor, decision, device and AQI state stays isolated by authenticated user", async () => {
+  const first = await registerAndLogin("telemetry-one@example.com");
+  const second = await registerAndLogin("telemetry-two@example.com");
+
+  const initial = await requestJson("/sensors", {
+    headers: { cookie: first.cookie }
+  });
+  assert.equal(initial.status, 409);
+  assert.match(initial.body.error, /No sensor readings/);
+
+  const simulated = await requestJson("/simulation/clean-air", {
+    method: "POST",
+    headers: { cookie: first.cookie },
+    body: {}
+  });
+  assert.equal(simulated.status, 200);
+  assert.equal(simulated.body.sensorData.outdoorAQI, 40);
+  assert.equal(simulated.body.decision.windows, "OPEN");
+
+  const firstSensors = await requestJson("/sensors", {
+    headers: { cookie: first.cookie }
+  });
+  assert.equal(firstSensors.status, 200);
+  assert.equal(firstSensors.body.sensorData.outdoorAQI, 40);
+
+  const secondSensors = await requestJson("/sensors", {
+    headers: { cookie: second.cookie }
+  });
+  assert.equal(secondSensors.status, 409);
+  const secondDecision = await requestJson("/decision", {
+    headers: { cookie: second.cookie }
+  });
+  assert.equal(secondDecision.status, 409);
+  const secondDevices = await requestJson("/devices", {
+    headers: { cookie: second.cookie }
+  });
+  assert.equal(secondDevices.status, 409);
+
+  const applied = await requestJson("/decision/apply", {
+    method: "POST",
+    headers: { cookie: first.cookie },
+    body: simulated.body.decision
+  });
+  assert.equal(applied.status, 200);
+  const firstDevices = await requestJson("/devices", {
+    headers: { cookie: first.cookie }
+  });
+  assert.equal(firstDevices.status, 200);
+  assert.equal(firstDevices.body.deviceState.windows, "OPEN");
+
+  assert.equal(database.prepare(
+    "SELECT COUNT(*) AS count FROM user_aqi_history WHERE user_id = ?"
+  ).get(first.userId).count, 1);
+  assert.equal(database.prepare(
+    "SELECT COUNT(*) AS count FROM user_aqi_history WHERE user_id = ?"
+  ).get(second.userId).count, 0);
+});
+
+test("location search reports missing configuration and restricts configured searches to India", async () => {
+  const account = await registerAndLogin("location-search@example.com");
+  const previousApiKey = process.env.GOOGLE_MAPS_GEOCODING_API_KEY;
+  const previousFetch = global.fetch;
+  delete process.env.GOOGLE_MAPS_GEOCODING_API_KEY;
+  try {
+    const unavailable = await requestJson("/account/location-search", {
+      method: "POST",
+      headers: { cookie: account.cookie },
+      body: { query: "Bengaluru" }
+    });
+    assert.equal(unavailable.status, 503);
+    assert.match(unavailable.body.error, /not configured/);
+
+    process.env.GOOGLE_MAPS_GEOCODING_API_KEY = "test-geocoding-key";
+    let requestedUrl;
+    global.fetch = async (url, options) => {
+      if (!String(url).startsWith("https://maps.googleapis.com/")) {
+        return previousFetch(url, options);
+      }
+      requestedUrl = new URL(String(url));
+      return {
+        ok: true,
+        async json() {
+          return {
+            status: "OK",
+            results: [{
+              formatted_address: "Bengaluru, Karnataka, India",
+              geometry: { location: { lat: 12.9716, lng: 77.5946 } }
+            }]
+          };
+        }
+      };
+    };
+    const found = await requestJson("/account/location-search", {
+      method: "POST",
+      headers: { cookie: account.cookie },
+      body: { query: "Bengaluru" }
+    });
+    assert.equal(found.status, 200);
+    assert.deepEqual(found.body.locations, [{
+      placeName: "Bengaluru, Karnataka, India",
+      latitude: 12.9716,
+      longitude: 77.5946
+    }]);
+    assert.equal(requestedUrl.searchParams.get("region"), "in");
+    assert.equal(requestedUrl.searchParams.get("key"), "test-geocoding-key");
+  } finally {
+    global.fetch = previousFetch;
+    if (previousApiKey === undefined) {
+      delete process.env.GOOGLE_MAPS_GEOCODING_API_KEY;
+    } else {
+      process.env.GOOGLE_MAPS_GEOCODING_API_KEY = previousApiKey;
+    }
+  }
 });
 
 test("startup restoration reloads latest sensor readings and applied device state", () => {
