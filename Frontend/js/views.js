@@ -2052,6 +2052,10 @@ const Views = {
   // 2-Minute Google Cloud Console OAuth Setup Modal
   renderGoogleSetupModal() {
     const existingId = API.getGoogleClientId();
+    const currentOrigin = (typeof window !== 'undefined' && window.location && window.location.origin && window.location.origin !== 'null') 
+      ? window.location.origin 
+      : 'http://localhost:8080';
+
     return `
       <div class="modal-backdrop google-auth-backdrop" id="google-setup-backdrop">
         <div class="google-setup-dialog" role="dialog" aria-modal="true">
@@ -2070,7 +2074,20 @@ const Views = {
             <div class="setup-intro-banner">
               <div class="setup-intro-icon">${Utils.icons.shield}</div>
               <div class="setup-intro-text">
-                <strong>Why this is needed:</strong> Google requires you to register your local origin (<code class="setup-origin-code">http://localhost:8080</code>) in Google Cloud Console so it can safely open your personal Google account selector. It's 100% free and takes ~2 minutes.
+                <strong>Why this is needed:</strong> Google requires you to register your local origin (<code class="setup-origin-code">${currentOrigin}</code>) in Google Cloud Console under <strong>Authorized JavaScript origins</strong>.
+              </div>
+            </div>
+
+            <!-- Fix callout for Error 401: no registered origin -->
+            <div class="setup-error-helper">
+              <div class="helper-badge">IMPORTANT FIX</div>
+              <div class="helper-text">
+                If Google shows <strong>"Access blocked: no registered origin (Error 401: invalid_client)"</strong>, it means the URL was added in the wrong box or not saved yet:
+                <ul>
+                  <li>Paste into <strong>"Authorized JavaScript origins"</strong> (<em>NOT</em> "Authorized redirect URIs").</li>
+                  <li>Do <strong>not</strong> include a trailing slash <code>/</code> (e.g. use <code>${currentOrigin}</code>).</li>
+                  <li>Click the blue <strong>SAVE</strong> button at the bottom of the Google page.</li>
+                </ul>
               </div>
             </div>
 
@@ -2079,12 +2096,12 @@ const Views = {
               <div class="setup-step-card">
                 <div class="step-num-badge">1</div>
                 <div class="step-card-content">
-                  <div class="step-card-title">Open Google Cloud Credentials</div>
+                  <div class="step-card-title">Open Your Existing Client ID in Google Cloud</div>
                   <div class="step-card-desc">
-                    Go to the Google Cloud Console credentials page (sign in with your personal Google account if prompted).
+                    Go to Google Cloud Credentials and click on the name of your Web client ID to edit it:
                   </div>
                   <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer" class="btn-step-action">
-                    <span>Open Google Cloud Console</span> <span style="font-size:11px;">↗</span>
+                    <span>Open Google Cloud Credentials</span> <span style="font-size:11px;">↗</span>
                   </a>
                 </div>
               </div>
@@ -2093,10 +2110,28 @@ const Views = {
               <div class="setup-step-card">
                 <div class="step-num-badge">2</div>
                 <div class="step-card-content">
-                  <div class="step-card-title">Create OAuth Client ID</div>
+                  <div class="step-card-title">Add to "Authorized JavaScript origins"</div>
                   <div class="step-card-desc">
-                    Click <strong>+ CREATE CREDENTIALS</strong> at the top &rarr; select <strong>OAuth client ID</strong>.<br>
-                    <span class="step-tip-text">Tip: If asked to configure the Consent Screen, select <em>External</em>, enter app name <em>Breathe Clean</em>, and click Save.</span>
+                    Scroll to <strong>Authorized JavaScript origins</strong> &rarr; click <strong>+ ADD URI</strong> &rarr; paste your exact address:
+                  </div>
+                  <div class="step-origins-copy-box">
+                    <div class="origin-copy-row highlight-current-origin">
+                      <div>
+                        <span class="badge-current-origin">Your Active Browser Origin</span>
+                        <code>${currentOrigin}</code>
+                      </div>
+                      <button type="button" class="btn-copy-origin" data-copy="${currentOrigin}">Copy</button>
+                    </div>
+                    ${currentOrigin !== 'http://localhost:8080' ? `
+                    <div class="origin-copy-row">
+                      <code>http://localhost:8080</code>
+                      <button type="button" class="btn-copy-origin" data-copy="http://localhost:8080">Copy</button>
+                    </div>` : ''}
+                    ${currentOrigin !== 'http://127.0.0.1:8080' ? `
+                    <div class="origin-copy-row">
+                      <code>http://127.0.0.1:8080</code>
+                      <button type="button" class="btn-copy-origin" data-copy="http://127.0.0.1:8080">Copy</button>
+                    </div>` : ''}
                   </div>
                 </div>
               </div>
@@ -2105,30 +2140,9 @@ const Views = {
               <div class="setup-step-card">
                 <div class="step-num-badge">3</div>
                 <div class="step-card-content">
-                  <div class="step-card-title">Select "Web application" & Add Origins</div>
+                  <div class="step-card-title">Click SAVE & Paste Client ID</div>
                   <div class="step-card-desc">
-                    Set Application type to <strong>Web application</strong>. Under <strong>Authorized JavaScript origins</strong>, click <strong>+ ADD URI</strong> and paste:
-                  </div>
-                  <div class="step-origins-copy-box">
-                    <div class="origin-copy-row">
-                      <code>http://localhost:8080</code>
-                      <button type="button" class="btn-copy-origin" data-copy="http://localhost:8080">Copy</button>
-                    </div>
-                    <div class="origin-copy-row">
-                      <code>http://127.0.0.1:8080</code>
-                      <button type="button" class="btn-copy-origin" data-copy="http://127.0.0.1:8080">Copy</button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Step 4 -->
-              <div class="setup-step-card">
-                <div class="step-num-badge">4</div>
-                <div class="step-card-content">
-                  <div class="step-card-title">Paste Your Client ID Below</div>
-                  <div class="step-card-desc">
-                    Click <strong>Create</strong>, copy the generated <strong>Client ID</strong>, and paste it here:
+                    Click the blue <strong>SAVE</strong> button at the bottom of the Google Cloud page, then paste your Client ID here:
                   </div>
                   <div class="setup-input-wrapper">
                     <input 
