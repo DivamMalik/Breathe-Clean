@@ -24,12 +24,12 @@ function evaluateDecision(request, response) {
   return response.json({ success: true, decision });
 }
 
-function applyDecision(_request, response) {
-  const decision = generateDecision(getSensorData());
-  const validation = validateDecision(decision);
+function applyDecision(request, response) {
+  const decision = request.body;
+  const validation = validateDecision(decision, getSensorData());
 
   if (!validation.valid) {
-    return response.status(422).json({
+    return response.status(400).json({
       success: false,
       applied: false,
       error: validation.error
