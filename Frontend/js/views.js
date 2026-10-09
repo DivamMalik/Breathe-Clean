@@ -758,7 +758,7 @@ const Views = {
     return `
       <div class="modal-backdrop" id="standards-modal-backdrop">
         <div class="modal-dialog modal-dialog-lg" role="dialog" aria-modal="true">
-          <div class="modal-header">
+          <div class="modal-header standards-modal-header">
             <div class="modal-header-title">
               <span class="standards-shield-badge">${Utils.icons.shieldCheck}</span>
               <div>
