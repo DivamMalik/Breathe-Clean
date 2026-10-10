@@ -247,3 +247,40 @@ test("new rooms do not invent sensor readings or preselect devices", async () =>
   assert.deepEqual(JSON.parse(JSON.stringify(room.devices)), []);
   assert.equal(room.activity[0].detail, "Room details saved to this account.");
 });
+
+test("logout clears client storage and succeeds when backend call succeeds", async () => {
+  const requests = [];
+  const api = createApi(async (url, options) => {
+    requests.push({ url, options });
+    return jsonResponse(200, { success: true });
+  });
+
+  api.testLocalStorage.setItem("breatheclean_user", JSON.stringify({ id: 42, name: "Logout Test User" }));
+  api.testLocalStorage.setItem("breatheclean_rooms:42", JSON.stringify([{ id: "room-1" }]));
+
+  const result = await api.logout();
+
+  assert.equal(result, true);
+  assert.equal(api.getCurrentUser(), null);
+  assert.equal(api.testLocalStorage.getItem("breatheclean_user"), null);
+  assert.equal(api.testLocalStorage.getItem("breatheclean_rooms:42"), null);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url, "http://localhost:5001/api/auth/logout");
+});
+
+test("logout safely clears client storage even when backend is offline or errors", async () => {
+  const api = createApi(async () => {
+    throw new Error("Failed to connect to backend server");
+  });
+
+  api.testLocalStorage.setItem("breatheclean_user", JSON.stringify({ id: 99, name: "Offline User" }));
+  api.testLocalStorage.setItem("breatheclean_rooms:99", JSON.stringify([{ id: "room-offline" }]));
+
+  const result = await api.logout();
+
+  assert.equal(result, true);
+  assert.equal(api.getCurrentUser(), null);
+  assert.equal(api.testLocalStorage.getItem("breatheclean_user"), null);
+  assert.equal(api.testLocalStorage.getItem("breatheclean_rooms:99"), null);
+});
+

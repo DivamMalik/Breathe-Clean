@@ -715,6 +715,10 @@ const API = {
     }
     try {
       await this._authRequest('logout', {});
+    } catch (error) {
+      // Backend may be offline, demo session active, or session already expired.
+      // Client-side logout must always succeed and clear credentials cleanly.
+      console.warn('Backend logout warning:', error?.message || error);
     } finally {
       if (userId) this._clearScopedData(userId);
       localStorage.removeItem(STORAGE_KEYS.USER);

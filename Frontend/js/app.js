@@ -696,6 +696,8 @@ const App = {
     const signOutBtn = document.getElementById('btn-sign-out-trigger');
     if (signOutBtn) {
       signOutBtn.addEventListener('click', () => {
+        const sidebar = document.getElementById('app-sidebar');
+        if (sidebar) sidebar.classList.remove('mobile-open');
         this.openSignOutModal();
       });
     }
@@ -1596,6 +1598,12 @@ const App = {
       });
     }
 
+    const btnSettingsSignOut = document.getElementById('btn-settings-signout');
+    if (btnSettingsSignOut) {
+      btnSettingsSignOut.addEventListener('click', () => {
+        this.openSignOutModal();
+      });
+    }
   },
 
   // -------------------------------------------------------------
@@ -2030,8 +2038,12 @@ const App = {
   },
 
   openSignOutModal() {
-    const container = document.getElementById('modal-container');
-    if (!container) return;
+    let container = document.getElementById('modal-container');
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'modal-container';
+      document.body.appendChild(container);
+    }
 
     container.innerHTML = Views.renderSignOutModal();
 
@@ -2052,15 +2064,24 @@ const App = {
 
     if (confirmBtn) {
       confirmBtn.addEventListener('click', async () => {
-        await API.logout();
-        Chatbot.setAccount(null);
-        State.user = null;
-        State.rooms = [];
-        State.activeRoomId = null;
-        this.onboardingUserId = null;
-        closeModal();
-        this.renderCurrentApplicationState();
-        Utils.showToast('Signed out successfully', 'info');
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = 'Signing out...';
+        try {
+          await API.logout();
+        } catch (error) {
+          console.warn('Sign out encountered error:', error);
+        } finally {
+          Chatbot.setAccount(null);
+          State.user = null;
+          State.rooms = [];
+          State.activeRoomId = null;
+          State.activeView = 'dashboard';
+          this.onboardingUserId = null;
+          closeModal();
+          window.location.hash = 'signin';
+          this.renderCurrentApplicationState();
+          Utils.showToast('Signed out successfully', 'info');
+        }
       });
     }
   },
@@ -2161,6 +2182,7 @@ const App = {
         isOnboarded: true,
         lastLogin: new Date().toISOString()
       };
+      API._storeUser(demoUser, false);
       this.setAuthenticatedUser(demoUser);
       State.rooms = API.getDefaultRooms();
       State.activeRoomId = State.rooms[0]?.id || 'room_bedroom';

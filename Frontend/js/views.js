@@ -1400,6 +1400,19 @@ const Views = {
             <h3 class="settings-card-title">Data & Privacy</h3>
             <p class="text-muted mb-3">Account setup and location are stored securely in your account. No demo-data reset is available for account data.</p>
           </div>
+
+          <div class="settings-card">
+            <h3 class="settings-card-title">Session & Security</h3>
+            <div class="settings-row">
+              <div>
+                <strong>Active Account Session</strong>
+                <p class="text-muted">Signed in as ${Utils.escapeHtml(user?.name || user?.email || 'Active User')}.</p>
+              </div>
+              <button class="btn btn-outline btn-sm" id="btn-settings-signout" style="color:var(--danger, #ef4444); border-color:#fca5a5;">
+                ${Utils.icons.logout} Sign out
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     `;
