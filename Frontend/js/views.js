@@ -1864,12 +1864,12 @@ const Views = {
     const isEdit = !!roomToEdit;
     const name = roomToEdit ? roomToEdit.name : '';
     const type = roomToEdit ? roomToEdit.type : 'Bedroom';
-    const length = roomToEdit ? roomToEdit.length : '';
-    const width = roomToEdit ? roomToEdit.width : '';
-    const ceilingHeight = roomToEdit ? roomToEdit.ceilingHeight : '';
-    const windows = roomToEdit ? roomToEdit.windowsCount : '';
-    const doors = roomToEdit ? roomToEdit.doorsCount : '';
-    const occupants = roomToEdit ? roomToEdit.typicalOccupants : '';
+    const length = roomToEdit ? roomToEdit.length : '4.0';
+    const width = roomToEdit ? roomToEdit.width : '3.5';
+    const ceilingHeight = roomToEdit ? roomToEdit.ceilingHeight : '2.8';
+    const windows = roomToEdit ? roomToEdit.windowsCount : '1';
+    const doors = roomToEdit ? roomToEdit.doorsCount : '1';
+    const occupants = roomToEdit ? roomToEdit.typicalOccupants : '2';
 
     return `
       <div class="modal-backdrop" id="space-modal-backdrop">

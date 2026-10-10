@@ -372,6 +372,21 @@ const API = {
   },
 
   async persistRoomsToAccountSetup() {
+    const user = this.getCurrentUser();
+    if (!user || user.id === 'usr_divam_01') {
+      const cached = this.getCachedAccountSetup() || {
+        setupCompleted: true,
+        rooms: this.getRooms(),
+        devices: { window: true, ventilation: true, purifier: true },
+        preferences: null,
+        location: null,
+        outdoorAirQuality: null
+      };
+      cached.rooms = this.getRooms();
+      this._setScopedItem(STORAGE_KEYS.SETUP, JSON.stringify(cached), user?.id || 'usr_divam_01');
+      return { success: true, setup: cached };
+    }
+
     const cached = this.getCachedAccountSetup();
     if (!cached) {
       const response = await this.getAccountSetup();
@@ -388,10 +403,26 @@ const API = {
         rooms: this.getRooms()
       });
     }
-    return this.saveAccountSetup({
+
+    let setupToSave = {
       ...cached,
       rooms: this.getRooms()
-    });
+    };
+    try {
+      return await this.saveAccountSetup(setupToSave);
+    } catch (err) {
+      if (/Outdoor AQI must come from the configured air-quality provider/.test(err.message)) {
+        const fresh = await this.getAccountSetup();
+        if (fresh?.setup) {
+          setupToSave = {
+            ...fresh.setup,
+            rooms: this.getRooms()
+          };
+          return await this.saveAccountSetup(setupToSave);
+        }
+      }
+      throw err;
+    }
   },
 
   getCachedAccountSetup() {

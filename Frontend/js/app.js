@@ -1989,6 +1989,18 @@ const App = {
           formError.style.display = 'none';
         }
         if (!form.checkValidity()) {
+          const invalidInput = Array.from(form.querySelectorAll('input, select')).find(input => !input.checkValidity());
+          if (invalidInput) {
+            const pane = invalidInput.closest('.space-step-pane');
+            if (pane) {
+              const paneStep = parseInt(pane.id.replace('space-step-pane-', ''), 10);
+              if (paneStep && paneStep !== currentStep) {
+                goToStep(paneStep);
+              }
+            }
+            invalidInput.reportValidity();
+            return;
+          }
           form.reportValidity();
           return;
         }
@@ -2189,6 +2201,7 @@ const App = {
       API._storeUser(demoUser, false);
       this.setAuthenticatedUser(demoUser);
       State.rooms = API.getDefaultRooms();
+      API.saveRooms(State.rooms);
       State.activeRoomId = State.rooms[0]?.id || 'room_bedroom';
       State.activeView = 'dashboard';
       window.location.hash = 'dashboard';

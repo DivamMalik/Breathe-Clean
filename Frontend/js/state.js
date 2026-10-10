@@ -440,9 +440,13 @@ const State = {
     try {
       await API.persistRoomsToAccountSetup();
     } catch (error) {
-      API.saveRooms(previousRooms);
-      this.rooms = previousRooms;
-      throw error;
+      if (error.code === 'NETWORK_ERROR' || /Unable to reach/.test(error.message)) {
+        console.warn('Backend is offline; room was saved locally.', error);
+      } else {
+        API.saveRooms(previousRooms);
+        this.rooms = previousRooms;
+        throw error;
+      }
     }
     this.activeRoomId = newRoom.id;
     API.setActiveRoomId(newRoom.id);
@@ -457,9 +461,13 @@ const State = {
     try {
       await API.persistRoomsToAccountSetup();
     } catch (error) {
-      API.saveRooms(previousRooms);
-      this.rooms = previousRooms;
-      throw error;
+      if (error.code === 'NETWORK_ERROR' || /Unable to reach/.test(error.message)) {
+        console.warn('Backend is offline; room updates saved locally.', error);
+      } else {
+        API.saveRooms(previousRooms);
+        this.rooms = previousRooms;
+        throw error;
+      }
     }
     this.notify('room_updated', updated);
     return updated;
@@ -475,9 +483,13 @@ const State = {
     try {
       await API.persistRoomsToAccountSetup();
     } catch (error) {
-      API.saveRooms(previousRooms);
-      this.rooms = previousRooms;
-      throw error;
+      if (error.code === 'NETWORK_ERROR' || /Unable to reach/.test(error.message)) {
+        console.warn('Backend is offline; room deletion saved locally.', error);
+      } else {
+        API.saveRooms(previousRooms);
+        this.rooms = previousRooms;
+        throw error;
+      }
     }
     if (this.activeRoomId === roomId) {
       this.activeRoomId = this.rooms[0].id;
@@ -494,9 +506,13 @@ const State = {
     try {
       await API.persistRoomsToAccountSetup();
     } catch (error) {
-      API.saveRooms(previousRooms);
-      this.rooms = previousRooms;
-      throw error;
+      if (error.code === 'NETWORK_ERROR' || /Unable to reach/.test(error.message)) {
+        console.warn('Backend is offline; room duplicate saved locally.', error);
+      } else {
+        API.saveRooms(previousRooms);
+        this.rooms = previousRooms;
+        throw error;
+      }
     }
     this.notify('room_created', duplicated);
     return duplicated;
