@@ -284,7 +284,9 @@ const API = {
         body: JSON.stringify(credentials)
       });
     } catch {
-      throw new Error('Unable to reach the Breathe Clean server. Check that it is running and try again.');
+      const error = new Error('Unable to reach the Breathe Clean server. Check that it is running and try again.');
+      error.code = 'NETWORK_ERROR';
+      throw error;
     }
     let result = null;
     try {
@@ -422,6 +424,13 @@ const API = {
     return result.airQuality;
   },
 
+  async getAnalyticsHistory(range = '24H') {
+    if (!['24H', '7D', '30D'].includes(range)) {
+      throw new Error('Select a supported analytics time range.');
+    }
+    return this._accountRequest(`analytics?range=${encodeURIComponent(range)}`);
+  },
+
   async _hydrateAccount(user, setupResponse) {
     const userId = String(user.id);
     let setup = setupResponse.setup;
@@ -481,6 +490,14 @@ const API = {
     }
 
     if (setup) {
+      const savedMode = ['AUTO', 'MANUAL'].includes(setup.controlMode)
+        ? setup.controlMode
+        : setup.rooms?.find(room => ['AUTO', 'MANUAL'].includes(room.mode))?.mode || 'AUTO';
+      setup = {
+        ...setup,
+        controlMode: savedMode,
+        rooms: (setup.rooms || []).map(room => ({ ...room, mode: savedMode }))
+      };
       this._setScopedItem(STORAGE_KEYS.SETUP, JSON.stringify(setup), userId);
       this._setScopedItem(STORAGE_KEYS.ROOMS, JSON.stringify(setup.rooms || []), userId);
       const scopedActiveRoomId = this._getScopedItem(STORAGE_KEYS.ACTIVE_ROOM_ID, userId);
@@ -551,6 +568,8 @@ const API = {
 
     return {
       sensors: sensors.sensorData,
+      sensorsSource: sensors.source || 'unverified',
+      simulated: sensors.simulated === true,
       devices: devices.deviceState,
       decision: decision.decision
     };
@@ -677,19 +696,25 @@ const API = {
       return onboardedUser;
     } catch (error) {
       if (accountCreated) {
-        throw new Error(
+        const recoveryError = new Error(
           `Your account was created, but setup could not be loaded. Please sign in to retry setup: ${error.message}`
         );
+        recoveryError.accountCreated = true;
+        throw recoveryError;
       }
       if (error.accountCreated) {
-        throw new Error(
+        const recoveryError = new Error(
           'Your account was created, but sign-in could not be started. Please sign in with your new credentials.'
         );
+        recoveryError.accountCreated = true;
+        throw recoveryError;
       }
-      if (!error.status && /Unable to reach/.test(error.message)) {
-        throw new Error(
+      if (error.code === 'NETWORK_ERROR' || (!error.status && /Unable to reach/.test(error.message))) {
+        const recoveryError = new Error(
           'We could not confirm whether your account was created because the server connection was lost. Try signing in before attempting registration again.'
         );
+        recoveryError.accountOutcomeUnknown = true;
+        throw recoveryError;
       }
       throw error;
     }
@@ -906,13 +931,27 @@ const API = {
 
   // Mode & Device Commands
   async setRoomMode(roomId, mode) {
-    await this._delay();
+    if (!['AUTO', 'MANUAL'].includes(mode)) {
+      throw new Error('Choose Auto or Manual mode.');
+    }
     const rooms = this.getRooms();
-    const room = rooms.find(r => r.id === roomId);
+    const room = rooms.find(candidate => candidate.id === roomId);
     if (!room) throw new Error('Room not found');
-    room.mode = mode;
-    this.saveRooms(rooms);
-    return room;
+    const updatedRooms = rooms.map(candidate => ({ ...candidate, mode }));
+    if (this._userId()) {
+      const cachedSetup = this.getCachedAccountSetup();
+      const setupResponse = cachedSetup ? null : await this.getAccountSetup();
+      const setup = cachedSetup || setupResponse?.setup;
+      if (!setup) throw new Error('Your account setup could not be loaded to save the mode.');
+      await this.saveAccountSetup({
+        ...setup,
+        controlMode: mode,
+        rooms: updatedRooms
+      });
+    } else {
+      this.saveRooms(updatedRooms);
+    }
+    return this.getRooms().find(candidate => candidate.id === roomId);
   },
 
   async sendDeviceCommand(roomId, deviceId, newState, source = 'YOU') {

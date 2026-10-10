@@ -70,6 +70,7 @@ database.exec(`
   CREATE TABLE IF NOT EXISTS user_environment_state (
     user_id INTEGER PRIMARY KEY,
     sensor_json TEXT,
+    sensor_source TEXT NOT NULL DEFAULT 'unverified',
     device_json TEXT,
     decision_json TEXT,
     updated_at TEXT NOT NULL,
@@ -84,6 +85,21 @@ database.exec(`
     co2 REAL NOT NULL,
     recorded_at TEXT NOT NULL,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS user_provider_aqi_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    aqi REAL NOT NULL,
+    category TEXT NOT NULL,
+    source TEXT NOT NULL,
+    unit TEXT NOT NULL,
+    latitude REAL NOT NULL,
+    longitude REAL NOT NULL,
+    place_name TEXT NOT NULL,
+    recorded_at TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    UNIQUE (user_id, source, latitude, longitude, recorded_at)
   );
 
   CREATE TABLE IF NOT EXISTS password_reset_tokens (
@@ -106,6 +122,15 @@ database.exec(`
   CREATE INDEX IF NOT EXISTS user_sessions_expires_at_idx
   ON user_sessions (expires_at);
 `);
+
+const userEnvironmentColumns = database.prepare(
+  "PRAGMA table_info(user_environment_state)"
+).all();
+if (!userEnvironmentColumns.some((column) => column.name === "sensor_source")) {
+  database.exec(
+    "ALTER TABLE user_environment_state ADD COLUMN sensor_source TEXT NOT NULL DEFAULT 'unverified'"
+  );
+}
 
 const userColumns = database.prepare("PRAGMA table_info(users)").all();
 if (!userColumns.some((column) => column.name === "name")) {
@@ -138,13 +163,15 @@ const insertUserEnvironmentState = database.prepare(`
 `);
 const selectUserEnvironmentState = database.prepare(`
   SELECT sensor_json AS sensorJson, device_json AS deviceJson,
-    decision_json AS decisionJson, updated_at AS updatedAt
+    decision_json AS decisionJson, sensor_source AS sensorSource,
+    updated_at AS updatedAt
   FROM user_environment_state
   WHERE user_id = @user_id
 `);
 const updateUserEnvironmentState = database.prepare(`
   UPDATE user_environment_state
   SET sensor_json = COALESCE(@sensor_json, sensor_json),
+      sensor_source = COALESCE(@sensor_source, sensor_source),
       device_json = COALESCE(@device_json, device_json),
       decision_json = COALESCE(@decision_json, decision_json),
       updated_at = @updated_at
@@ -153,6 +180,27 @@ const updateUserEnvironmentState = database.prepare(`
 const insertUserAqiHistory = database.prepare(`
   INSERT INTO user_aqi_history (user_id, indoor_aqi, outdoor_aqi, co2, recorded_at)
   VALUES (@user_id, @indoor_aqi, @outdoor_aqi, @co2, @recorded_at)
+`);
+const insertUserProviderAqiHistory = database.prepare(`
+  INSERT OR IGNORE INTO user_provider_aqi_history (
+    user_id, aqi, category, source, unit, latitude, longitude, place_name, recorded_at
+  ) VALUES (
+    @user_id, @aqi, @category, @source, @unit, @latitude, @longitude, @place_name, @recorded_at
+  )
+`);
+const selectUserProviderAqiHistory = database.prepare(`
+  SELECT
+    aqi,
+    category,
+    source,
+    unit,
+    latitude,
+    longitude,
+    place_name AS placeName,
+    recorded_at AS recordedAt
+  FROM user_provider_aqi_history
+  WHERE user_id = @user_id AND recorded_at >= @since
+  ORDER BY recorded_at ASC, id ASC
 `);
 const selectUserByEmail = database.prepare(`
   SELECT id, email, name, password_hash, created_at AS createdAt
@@ -216,17 +264,22 @@ function getUserEnvironmentState(userId) {
   if (!row) return null;
   return {
     sensorData: row.sensorJson ? JSON.parse(row.sensorJson) : null,
+    sensorSource: row.sensorSource || "unverified",
     deviceState: row.deviceJson ? JSON.parse(row.deviceJson) : null,
     decision: row.decisionJson ? JSON.parse(row.decisionJson) : null,
     updatedAt: row.updatedAt
   };
 }
 
-function saveUserEnvironmentState(userId, { sensorData, deviceState, decision } = {}) {
+function saveUserEnvironmentState(
+  userId,
+  { sensorData, sensorSource, deviceState, decision } = {}
+) {
   const recordedAt = new Date().toISOString();
   updateUserEnvironmentState.run({
     user_id: userId,
     sensor_json: sensorData === undefined ? null : JSON.stringify(sensorData),
+    sensor_source: sensorSource === undefined ? null : sensorSource,
     device_json: deviceState === undefined ? null : JSON.stringify(deviceState),
     decision_json: decision === undefined ? null : JSON.stringify(decision),
     updated_at: recordedAt
@@ -241,6 +294,24 @@ function saveUserEnvironmentState(userId, { sensorData, deviceState, decision } 
     });
   }
   return getUserEnvironmentState(userId);
+}
+
+function saveUserProviderAqiHistory(userId, airQuality, placeName) {
+  insertUserProviderAqiHistory.run({
+    user_id: userId,
+    aqi: airQuality.aqi,
+    category: airQuality.category,
+    source: airQuality.source,
+    unit: airQuality.unit,
+    latitude: airQuality.latitude,
+    longitude: airQuality.longitude,
+    place_name: placeName,
+    recorded_at: airQuality.lastUpdated
+  });
+}
+
+function getUserProviderAqiHistory(userId, since) {
+  return selectUserProviderAqiHistory.all({ user_id: userId, since });
 }
 
 function getUserByEmail(email) {
@@ -421,12 +492,14 @@ module.exports = {
   getPublicUserById,
   getUserByEmail,
   getUserEnvironmentState,
+  getUserProviderAqiHistory,
   getUserSetup,
   getLatestAppliedDeviceState,
   getLatestSensorReading,
   resetPasswordWithToken,
   saveAppliedDecision,
   saveUserSetup,
+  saveUserProviderAqiHistory,
   saveUserEnvironmentState,
   saveSensorReading
 };

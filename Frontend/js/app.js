@@ -4,6 +4,7 @@ const App = {
   airflowAnimId: null,
   particles: [],
   analyticsData: null,
+  analyticsRequestId: 0,
   pendingTargetMode: null,
   dashboardRequestId: 0,
   deviceRequestId: 0,
@@ -148,7 +149,7 @@ const App = {
     } else if (State.activeView === 'devices') {
       this.refreshDevicesFromBackend();
     } else if (State.activeView === 'analytics') {
-      this.renderAnalyticsChart();
+      this.loadAnalytics('24H');
     }
   },
 
@@ -228,7 +229,7 @@ const App = {
     if (airQualitySummary) {
       const airQuality = this.onboardingOutdoorAirQuality;
       airQualitySummary.textContent = airQuality
-        ? `Outdoor AQI: ${airQuality.aqi} (${airQuality.category || 'current'}) · ${airQuality.placeName || this.onboardingLocation?.placeName || 'Saved location'} · ${airQuality.unit} · ${airQuality.source} · updated ${new Date(airQuality.lastUpdated).toLocaleString()}`
+        ? `Outdoor AQI: ${airQuality.aqi} (${airQuality.category || 'current'}) · ${airQuality.placeName || this.onboardingLocation?.placeName || 'Saved location'} · ${airQuality.unit} · ${airQuality.source} · observed ${new Date(airQuality.lastUpdated).toLocaleString()}`
         : 'Outdoor AQI unavailable.';
     }
     const retryButton = document.getElementById('btn-onboarding-retry-aqi');
@@ -463,7 +464,7 @@ const App = {
         } else if (data === 'devices') {
           this.refreshDevicesFromBackend();
         } else if (data === 'analytics') {
-          this.renderAnalyticsChart();
+          this.loadAnalytics('24H');
         }
       }
     } else if (event === 'room_changed' || event === 'mode_changed' || event === 'evaluated' || event === 'device_updated' || event === 'environment_updated') {
@@ -529,7 +530,7 @@ const App = {
   async refreshDashboardFromBackend() {
     const requestId = ++this.dashboardRequestId;
     const roomId = State.activeRoomId;
-    this.updateDashboardApiStatus('loading', 'Loading live sensor readings, device states, and decision from backend…');
+    this.updateDashboardApiStatus('loading', 'Loading account sensor data, device states, and decision from backend…');
 
     try {
       const dashboardData = await API.getDashboardData();
@@ -542,7 +543,12 @@ const App = {
       }
 
       State.applyDashboardDataFromBackend(dashboardData);
-      this.updateDashboardApiStatus('ready', 'Live dashboard data loaded from backend.');
+      this.updateDashboardApiStatus(
+        'ready',
+        dashboardData.simulated
+          ? 'Simulation data loaded from backend; these readings are simulated, not live.'
+          : `Backend sensor data loaded (source: ${dashboardData.sensorsSource || 'unverified'}).`
+      );
 
       const container = document.getElementById('app-body-container');
       if (container) {
@@ -741,13 +747,16 @@ const App = {
 
     // Mode Toggle Segmented Control (AUTO / MANUAL)
     document.querySelectorAll('.mode-segmented-pill .mode-segment-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', async () => {
         const targetMode = btn.dataset.mode;
-        if (targetMode !== 'AUTO') return;
-        this.performDashboardControl(
-          () => State.applyDashboardDecision(),
-          'The backend applied its safety-validated policy.'
-        );
+        const buttons = [...document.querySelectorAll('.mode-segmented-pill .mode-segment-btn')];
+        buttons.forEach(button => { button.disabled = true; });
+        try {
+          await this.changeDashboardMode(targetMode);
+        } finally {
+          document.querySelectorAll('.mode-segmented-pill .mode-segment-btn')
+            .forEach(button => { button.disabled = false; });
+        }
       });
     });
 
@@ -768,6 +777,32 @@ const App = {
         Utils.showToast(`Outdoor air quality currently at AQI ${aqi}. System actively managing indoor environment.`, 'info');
       });
     }
+  },
+
+  async changeDashboardMode(targetMode) {
+    const room = State.getActiveRoom();
+    if (!room || !['AUTO', 'MANUAL'].includes(targetMode) || room.mode === targetMode) return false;
+    try {
+      await State.setMode(room.id, targetMode);
+    } catch (error) {
+      const message = `Mode could not be saved: ${error.message}`;
+      this.updateDashboardApiStatus('error', message);
+      Utils.showToast(message, 'warning');
+      return false;
+    }
+    if (targetMode === 'AUTO') {
+      try {
+        await State.applyDashboardDecision();
+        Utils.showToast('Auto mode saved; the backend applied its safety-validated decision.', 'success');
+      } catch (error) {
+        const message = `Auto mode was saved, but its safety decision was not applied: ${error.message}`;
+        this.updateDashboardApiStatus('error', message);
+        Utils.showToast(message, 'warning');
+      }
+    } else {
+      Utils.showToast('Manual mode saved. Automatic decisions will not change device settings.', 'success');
+    }
+    return true;
   },
 
   attachViewSpecificEvents() {
@@ -1401,7 +1436,7 @@ const App = {
       btn.addEventListener('click', () => {
         document.querySelectorAll('.analytics-time-pills .time-filter-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
-        this.renderAnalyticsChart(btn.dataset.time);
+        this.loadAnalytics(btn.dataset.time);
       });
     });
 
@@ -1414,9 +1449,76 @@ const App = {
     }
   },
 
-  renderAnalyticsChart(timeframe = '24H') {
+  async loadAnalytics(timeframe = '24H') {
+    const requestId = ++this.analyticsRequestId;
+    const dataStatus = document.getElementById('analytics-data-status');
+    if (dataStatus) dataStatus.textContent = 'Loading verified account history…';
+    try {
+      const result = await API.getAnalyticsHistory(timeframe);
+      if (requestId !== this.analyticsRequestId || State.activeView !== 'analytics') return;
+      this.analyticsData = result;
+      this.renderAnalyticsSummary(result.summary);
+      this.renderAnalyticsChart(timeframe, result);
+    } catch (error) {
+      if (requestId !== this.analyticsRequestId || State.activeView !== 'analytics') return;
+      this.analyticsData = null;
+      this.renderAnalyticsSummary(null);
+      this.renderAnalyticsChart(timeframe, null);
+      if (dataStatus) dataStatus.textContent = `Account history unavailable: ${error.message}`;
+    }
+  },
+
+  renderAnalyticsSummary(summary) {
+    const setText = (id, value) => {
+      const element = document.getElementById(id);
+      if (element) element.textContent = value;
+    };
+    setText('analytics-automatic-actions', Number.isFinite(summary?.automaticActions)
+      ? String(summary.automaticActions)
+      : 'Unavailable');
+    setText('analytics-manual-overrides', Number.isFinite(summary?.manualOverrides)
+      ? String(summary.manualOverrides)
+      : 'Unavailable');
+    setText('analytics-indoor-average', Number.isFinite(summary?.indoorAQIAverage)
+      ? summary.indoorAQIAverage.toFixed(1)
+      : 'Unavailable');
+    setText('analytics-filter-life', Number.isFinite(summary?.filterLife)
+      ? `${summary.filterLife}%`
+      : 'Unavailable');
+  },
+
+  renderAnalyticsChart(timeframe = '24H', analytics = this.analyticsData) {
     const canvas = document.getElementById('analytics-chart-canvas');
     if (!canvas) return;
+    const emptyState = document.getElementById('analytics-empty-state');
+    const dataStatus = document.getElementById('analytics-data-status');
+    const metric = document.getElementById('analytics-metric-select')?.value || 'indoorAQI';
+    const rangeMs = {
+      '24H': 24 * 60 * 60 * 1000,
+      '7D': 7 * 24 * 60 * 60 * 1000,
+      '30D': 30 * 24 * 60 * 60 * 1000
+    }[timeframe];
+    if (!rangeMs) return;
+    const now = Date.now();
+    const readings = (analytics?.readings || [])
+      .filter(reading =>
+        reading.metric === metric &&
+        Number.isFinite(reading.value) &&
+        Number.isFinite(Date.parse(reading.recordedAt)) &&
+        Date.parse(reading.recordedAt) >= now - rangeMs &&
+        Date.parse(reading.recordedAt) <= now
+      )
+      .sort((first, second) => Date.parse(first.recordedAt) - Date.parse(second.recordedAt));
+    if (emptyState) emptyState.hidden = readings.length > 0;
+    canvas.hidden = readings.length === 0;
+    if (!readings.length) {
+      if (canvas.getContext) {
+        const emptyContext = canvas.getContext('2d');
+        if (emptyContext) emptyContext.clearRect(0, 0, canvas.width, canvas.height);
+      }
+      if (dataStatus) dataStatus.textContent = 'No verified AQI history available yet.';
+      return;
+    }
 
     const ctx = canvas.getContext ? canvas.getContext('2d') : null;
     if (!ctx) return;
@@ -1430,36 +1532,6 @@ const App = {
     const width = rect.width || 900;
     const height = rect.height || 300;
 
-    const metricSelect = document.getElementById('analytics-metric-select');
-    const metric = metricSelect ? metricSelect.value : 'indoorAQI';
-
-    let points = [];
-    let labels = [];
-
-    if (timeframe === '24H') {
-      labels = ['12 AM', '3 AM', '6 AM', '9 AM', '12 PM', '3 PM', '6 PM', '9 PM', 'Now'];
-      if (metric === 'indoorAQI') {
-        points = [32, 28, 30, 48, 62, 54, 42, 38, 36];
-      } else if (metric === 'co2') {
-        points = [580, 520, 540, 780, 890, 810, 720, 640, 620];
-      } else {
-        points = [75, 70, 85, 120, 135, 115, 110, 112, 110];
-      }
-    } else if (timeframe === '7D') {
-      labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-      if (metric === 'indoorAQI') points = [35, 42, 38, 52, 45, 30, 36];
-      else if (metric === 'co2') points = [620, 710, 680, 840, 790, 590, 640];
-      else points = [90, 115, 128, 140, 112, 85, 110];
-    } else {
-      labels = ['Week 1', 'Week 2', 'Week 3', 'Week 4'];
-      if (metric === 'indoorAQI') points = [38, 44, 40, 35];
-      else if (metric === 'co2') points = [660, 720, 690, 630];
-      else points = [105, 125, 118, 98];
-    }
-
-    const minVal = Math.min(...points) * 0.75;
-    const maxVal = Math.max(...points) * 1.25;
-
     ctx.clearRect(0, 0, width, height);
 
     const padLeft = 50;
@@ -1468,6 +1540,12 @@ const App = {
     const padBottom = 45;
     const plotW = width - padLeft - padRight;
     const plotH = height - padTop - padBottom;
+    const values = readings.map(reading => reading.value);
+    const observedMin = Math.min(...values);
+    const observedMax = Math.max(...values);
+    const padding = observedMin === observedMax ? Math.max(Math.abs(observedMin) * 0.1, 1) : (observedMax - observedMin) * 0.1;
+    const minVal = observedMin - padding;
+    const maxVal = observedMax + padding;
 
     // Grid lines & Y Axis Labels
     ctx.strokeStyle = '#e5e7eb';
@@ -1489,56 +1567,28 @@ const App = {
       ctx.fillText(val, padLeft - 10, y + 4);
     }
 
-    // X Axis Labels
-    ctx.textAlign = 'center';
-    const xStep = plotW / Math.max(1, (points.length - 1));
-    labels.forEach((lbl, i) => {
-      const x = padLeft + i * xStep;
-      ctx.fillText(lbl, x, height - 15);
+    const firstTime = Date.parse(readings[0].recordedAt);
+    const lastTime = Date.parse(readings[readings.length - 1].recordedAt);
+    const coords = readings.map(reading => {
+      const timestamp = Date.parse(reading.recordedAt);
+      const x = padLeft + (lastTime === firstTime ? plotW / 2 : ((timestamp - firstTime) / (lastTime - firstTime)) * plotW);
+      const y = padTop + plotH - ((reading.value - minVal) / (maxVal - minVal || 1)) * plotH;
+      return { x, y, reading };
     });
 
-    // Map data to coordinates
-    const coords = points.map((val, i) => {
-      const x = padLeft + i * xStep;
-      const y = padTop + plotH - ((val - minVal) / (maxVal - minVal || 1)) * plotH;
-      return { x, y, val };
-    });
-
-    // Draw Smooth Spline Area
-    if (ctx.createLinearGradient) {
-      const gradient = ctx.createLinearGradient(0, padTop, 0, padTop + plotH);
-      gradient.addColorStop(0, 'rgba(21, 128, 61, 0.22)');
-      gradient.addColorStop(1, 'rgba(21, 128, 61, 0.01)');
-
-      ctx.beginPath();
-      ctx.moveTo(coords[0].x, coords[0].y);
-      for (let i = 0; i < coords.length - 1; i++) {
-        const cpX = (coords[i].x + coords[i + 1].x) / 2;
-        ctx.bezierCurveTo(cpX, coords[i].y, cpX, coords[i + 1].y, coords[i + 1].x, coords[i + 1].y);
-      }
-      ctx.lineTo(coords[coords.length - 1].x, padTop + plotH);
-      ctx.lineTo(coords[0].x, padTop + plotH);
-      ctx.closePath();
-      ctx.fillStyle = gradient;
-      ctx.fill();
-    }
-
-    // Draw Spline Line
     ctx.beginPath();
     ctx.moveTo(coords[0].x, coords[0].y);
     for (let i = 0; i < coords.length - 1; i++) {
-      const cpX = (coords[i].x + coords[i + 1].x) / 2;
-      ctx.bezierCurveTo(cpX, coords[i].y, cpX, coords[i + 1].y, coords[i + 1].x, coords[i + 1].y);
+      ctx.lineTo(coords[i + 1].x, coords[i + 1].y);
     }
     ctx.strokeStyle = '#15803d';
     ctx.lineWidth = 2.5;
     ctx.lineCap = 'round';
     ctx.stroke();
 
-    // Draw Points
-    coords.forEach(pt => {
+    coords.forEach(point => {
       ctx.beginPath();
-      ctx.arc(pt.x, pt.y, 4, 0, Math.PI * 2);
+      ctx.arc(point.x, point.y, 4, 0, Math.PI * 2);
       ctx.fillStyle = '#ffffff';
       ctx.fill();
       ctx.lineWidth = 2;
@@ -1546,8 +1596,27 @@ const App = {
       ctx.stroke();
     });
 
-    const dataStatus = document.getElementById('analytics-data-status');
-    if (dataStatus) dataStatus.textContent = 'Active Telemetry Sync';
+    ctx.textAlign = 'center';
+    const labelCount = Math.min(coords.length, 6);
+    for (let index = 0; index < labelCount; index++) {
+      const readingIndex = labelCount === 1
+        ? 0
+        : Math.round(index * (coords.length - 1) / (labelCount - 1));
+      const point = coords[readingIndex];
+      const timestamp = new Date(point.reading.recordedAt);
+      ctx.fillText(
+        timeframe === '24H'
+          ? timestamp.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+          : timestamp.toLocaleDateString([], { month: 'short', day: 'numeric' }),
+        point.x,
+        height - 15
+      );
+    }
+
+    const latest = readings[readings.length - 1];
+    if (dataStatus) {
+      dataStatus.textContent = `${readings.length} verified provider reading${readings.length === 1 ? '' : 's'} · ${latest.source} · latest ${new Date(latest.recordedAt).toLocaleString()} · ${latest.placeName}`;
+    }
   },
 
   // -------------------------------------------------------------
@@ -2481,18 +2550,44 @@ const App = {
     }
 
     if (formSignUp) {
+      const recoveryButton = document.getElementById('btn-signup-recover-account');
+      const signupError = document.getElementById('signup-error');
+      const showSignupError = (message) => {
+        if (!signupError) return;
+        signupError.textContent = message;
+        signupError.style.display = 'block';
+      };
+
+      recoveryButton?.addEventListener('click', async () => {
+        const email = document.getElementById('signup-email').value;
+        const password = document.getElementById('signup-password').value;
+        recoveryButton.disabled = true;
+        recoveryButton.textContent = 'Checking sign-in…';
+        try {
+          const user = await API.login(email, password, true);
+          API.updateUser(user);
+          this.setAuthenticatedUser(user);
+          this.onboardingStep = 1;
+          this.onboardingUserId = null;
+          this.renderCurrentApplicationState();
+        } catch (error) {
+          const recoveryMessage = error.status === 401
+            ? 'Sign-in did not verify these credentials. If you already have an account, use its password or reset it. If registration did not complete, you can submit it again; account emails are unique.'
+            : `Sign-in could not be confirmed. No second registration was sent. Try signing in again when the server is reachable; if the account does not exist, you can safely retry registration. ${error.message}`;
+          showSignupError(recoveryMessage);
+        } finally {
+          recoveryButton.disabled = false;
+          recoveryButton.textContent = 'Check by signing in';
+        }
+      });
+
       formSignUp.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const signupError = document.getElementById('signup-error');
-        const showSignupError = (message) => {
-          if (!signupError) return;
-          signupError.textContent = message;
-          signupError.style.display = 'block';
-        };
         if (signupError) {
           signupError.textContent = '';
           signupError.style.display = 'none';
         }
+        if (recoveryButton) recoveryButton.hidden = true;
 
         const name = document.getElementById('signup-name').value;
         const email = document.getElementById('signup-email').value;
@@ -2513,6 +2608,12 @@ const App = {
           this.renderCurrentApplicationState();
         } catch (err) {
           showSignupError(err.message || 'Unable to create your account. Please try again.');
+          if (
+            recoveryButton &&
+            (err.accountOutcomeUnknown || err.accountCreated || err.status === 409)
+          ) {
+            recoveryButton.hidden = false;
+          }
         }
       });
     }
@@ -2641,6 +2742,13 @@ const App = {
 
     const gpsButton = document.getElementById('btn-onboarding-use-location');
     gpsButton?.addEventListener('click', () => this.requestCurrentLocation());
+    const locationSearchInput = document.getElementById('onboarding-location-search');
+    locationSearchInput?.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        return this.searchOnboardingLocations();
+      }
+    });
     const locationSearchButton = document.getElementById('btn-onboarding-search-location');
     locationSearchButton?.addEventListener('click', () => this.searchOnboardingLocations());
     const manualLocationButton = document.getElementById('btn-onboarding-save-manual-location');

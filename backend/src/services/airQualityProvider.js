@@ -57,7 +57,14 @@ async function getCurrentOutdoorAirQuality(latitude, longitude, options = {}) {
   }
 
   const index = result.indexes?.find((candidate) => candidate.code === "uaqi");
-  if (!index || !Number.isFinite(index.aqi) || typeof index.category !== "string") {
+  const observedAt = result.dateTime;
+  if (
+    !index ||
+    !Number.isFinite(index.aqi) ||
+    typeof index.category !== "string" ||
+    typeof observedAt !== "string" ||
+    Number.isNaN(Date.parse(observedAt))
+  ) {
     const error = new Error("Outdoor AQI is unavailable for these coordinates");
     error.statusCode = 502;
     throw error;
@@ -68,7 +75,7 @@ async function getCurrentOutdoorAirQuality(latitude, longitude, options = {}) {
     category: index.category,
     source: "Google Maps Platform Air Quality API (Universal AQI)",
     unit: "AQI index (unitless)",
-    lastUpdated: new Date().toISOString(),
+    lastUpdated: new Date(observedAt).toISOString(),
     latitude,
     longitude
   };

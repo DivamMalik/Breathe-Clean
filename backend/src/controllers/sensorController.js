@@ -17,9 +17,19 @@ function getSensors(request, response) {
         error: "No sensor readings are configured for this account yet"
       });
     }
-    return response.json({ success: true, sensorData: state.sensorData });
+    return response.json({
+      success: true,
+      sensorData: state.sensorData,
+      source: state.sensorSource,
+      simulated: state.sensorSource === "simulation"
+    });
   }
-  response.json({ success: true, sensorData: getSensorData() });
+  response.json({
+    success: true,
+    sensorData: getSensorData(),
+    source: "simulation",
+    simulated: true
+  });
 }
 
 function updateSensors(request, response) {
@@ -30,8 +40,11 @@ function updateSensors(request, response) {
     if (validation.error) {
       return response.status(400).json({ success: false, error: validation.error });
     }
-    saveUserEnvironmentState(request.user.id, { sensorData });
-    return response.json({ success: true, sensorData });
+    saveUserEnvironmentState(request.user.id, {
+      sensorData,
+      sensorSource: "unverified"
+    });
+    return response.json({ success: true, sensorData, source: "unverified", simulated: false });
   }
 
   const result = updateSensorData(request.body);
@@ -39,7 +52,12 @@ function updateSensors(request, response) {
     return response.status(400).json({ success: false, error: result.error });
   }
 
-  return response.json({ success: true, sensorData: result.data });
+  return response.json({
+    success: true,
+    sensorData: result.data,
+    source: "simulation",
+    simulated: true
+  });
 }
 
 module.exports = { getSensors, updateSensors };

@@ -129,6 +129,179 @@ test("signup surfaces duplicate-registration errors without attempting login", a
   assert.equal(requests[0].options.method, "POST");
 });
 
+test("signup never retries a registration after connection loss and can recover by signing in", async () => {
+  const requests = [];
+  const setup = {
+    setupCompleted: false,
+    rooms: [],
+    devices: { window: false, ventilation: false, purifier: false },
+    preferences: null,
+    location: null,
+    outdoorAirQuality: null
+  };
+  const api = createApi(async (url, options) => {
+    requests.push({ url, options });
+    if (url.endsWith("/auth/register")) {
+      throw new TypeError("Failed to fetch");
+    }
+    if (url.endsWith("/auth/login")) {
+      return jsonResponse(200, {
+        success: true,
+        user: { id: 37, email: "recovered@example.com", name: "Recovered User" }
+      });
+    }
+    if (url.endsWith("/account/setup")) {
+      return jsonResponse(200, {
+        success: true,
+        hasSetup: true,
+        setupComplete: false,
+        setup
+      });
+    }
+    throw new Error(`Unexpected URL: ${url}`);
+  });
+
+  await assert.rejects(
+    api.signup("Recovered User", "recovered@example.com", "correct horse battery staple"),
+    error => {
+      assert.match(error.message, /Try signing in before attempting registration again/);
+      assert.equal(error.accountOutcomeUnknown, true);
+      return true;
+    }
+  );
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url, "http://localhost:5001/api/auth/register");
+
+  const user = await api.login("recovered@example.com", "correct horse battery staple");
+
+  assert.equal(user.id, 37);
+  assert.deepEqual(
+    requests.map(({ url, options }) => [url, options.method || "GET"]),
+    [
+      ["http://localhost:5001/api/auth/register", "POST"],
+      ["http://localhost:5001/api/auth/login", "POST"],
+      ["http://localhost:5001/api/account/setup", "GET"]
+    ]
+  );
+});
+
+test("manual Indian location search uses the authenticated mounted POST route", async () => {
+  const requests = [];
+  const api = createApi(async (url, options) => {
+    requests.push({ url, options });
+    return jsonResponse(200, {
+      success: true,
+      locations: [{
+        placeName: "Pune, Maharashtra, India",
+        latitude: 18.5204,
+        longitude: 73.8567
+      }]
+    });
+
+    test("mode saves to the authenticated account setup and restores independently by account", async () => {
+      const requests = [];
+      const api = createApi(async (url, options) => {
+        requests.push({ url, options });
+        if (url.endsWith("/account/setup") && options.method === "PUT") {
+          return jsonResponse(200, { success: true, setup: JSON.parse(options.body) });
+        }
+        throw new Error(`Unexpected URL: ${url}`);
+      });
+      const room = {
+        id: "office",
+        name: "Office",
+        mode: "AUTO",
+        devices: [{ type: "window" }]
+      };
+      const firstSetup = {
+        setupCompleted: false,
+        controlMode: "AUTO",
+        rooms: [room],
+        devices: { window: true, ventilation: false, purifier: false },
+        preferences: null,
+        location: null,
+        outdoorAirQuality: null
+      };
+      api._storeUser({ id: 51 }, true);
+      api._setScopedItem("breatheclean_setup", JSON.stringify(firstSetup), "51");
+      api._setScopedItem("breatheclean_rooms", JSON.stringify([room]), "51");
+
+      await api.setRoomMode("office", "MANUAL");
+      assert.equal(requests.length, 1);
+      assert.equal(requests[0].url, "http://localhost:5001/api/account/setup");
+      assert.equal(requests[0].options.method, "PUT");
+      const saved = JSON.parse(requests[0].options.body);
+      assert.equal(saved.controlMode, "MANUAL");
+      assert.equal(saved.rooms[0].mode, "MANUAL");
+
+      const secondRoom = { ...room, mode: "AUTO" };
+      api._storeUser({ id: 52 }, true);
+      api._setScopedItem("breatheclean_rooms", JSON.stringify([secondRoom]), "52");
+      assert.equal(api.getRooms()[0].mode, "AUTO");
+      api._storeUser({ id: 51 }, true);
+      assert.equal(api.getRooms()[0].mode, "MANUAL");
+      const restored = await api._hydrateAccount(
+        { id: 51 },
+        { hasSetup: true, setupComplete: false, setup: saved }
+      );
+      assert.equal(restored.id, 51);
+      assert.equal(api.getRooms()[0].mode, "MANUAL");
+    });
+
+    test("failed mode persistence does not visually or locally switch modes", async () => {
+      const api = createApi(async () =>
+        jsonResponse(503, { success: false, error: "Account setup unavailable" })
+      );
+      const room = {
+        id: "office",
+        name: "Office",
+        mode: "AUTO",
+        devices: [{ type: "window" }]
+      };
+      api._storeUser({ id: 53 }, true);
+      api._setScopedItem("breatheclean_setup", JSON.stringify({
+        setupCompleted: false,
+        controlMode: "AUTO",
+        rooms: [room],
+        devices: { window: true, ventilation: false, purifier: false },
+        preferences: null,
+        location: null,
+        outdoorAirQuality: null
+      }), "53");
+      api._setScopedItem("breatheclean_rooms", JSON.stringify([room]), "53");
+
+      await assert.rejects(api.setRoomMode("office", "MANUAL"), /Account setup unavailable/);
+      assert.equal(api.getRooms()[0].mode, "AUTO");
+      assert.equal(api.getCachedAccountSetup().controlMode, "AUTO");
+    });
+
+    test("analytics requests use the authenticated account route and reject unsupported ranges", async () => {
+      const requests = [];
+      const api = createApi(async (url, options) => {
+        requests.push({ url, options });
+        return jsonResponse(200, { success: true, readings: [] });
+      });
+      await api.getAnalyticsHistory("7D");
+      assert.equal(requests[0].url, "http://localhost:5001/api/account/analytics?range=7D");
+      assert.equal(requests[0].options.credentials, "include");
+      assert.equal(requests[0].options.method, undefined);
+      await assert.rejects(api.getAnalyticsHistory("ALL"), /supported analytics time range/);
+    });
+  });
+
+  const locations = await api.searchIndianLocations("Pune");
+
+  assert.deepEqual(JSON.parse(JSON.stringify(locations)), [{
+    placeName: "Pune, Maharashtra, India",
+    latitude: 18.5204,
+    longitude: 73.8567
+  }]);
+  assert.equal(requests[0].url, "http://localhost:5001/api/account/location-search");
+  assert.equal(requests[0].options.method, "POST");
+  assert.equal(requests[0].options.credentials, "include");
+  assert.deepEqual(JSON.parse(requests[0].options.body), { query: "Pune" });
+});
+
 test("session restoration keeps the account full name while hydrating setup", async () => {
   const requests = [];
   const setup = {
@@ -178,7 +351,11 @@ test("signup explains when registration succeeded but setup loading failed", asy
 
   await assert.rejects(
     api.signup("Partial User", "partial@example.com", "correct horse battery staple"),
-    /Your account was created, but setup could not be loaded.*Route not found/
+    error => {
+      assert.match(error.message, /Your account was created, but setup could not be loaded.*Route not found/);
+      assert.equal(error.accountCreated, true);
+      return true;
+    }
   );
   assert.equal(requests.length, 2);
   assert.equal(requests[1].url, "http://localhost:5001/api/account/setup");

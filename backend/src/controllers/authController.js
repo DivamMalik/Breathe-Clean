@@ -94,7 +94,8 @@ async function register(request, response) {
     const userId = Number(result.lastInsertRowid);
     try {
       await createSession(request, userId);
-    } catch {
+    } catch (error) {
+      console.error("Account was created, but signup session creation failed.", error);
       return response.status(503).json({
         success: false,
         accountCreated: true,

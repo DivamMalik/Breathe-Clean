@@ -1,5 +1,9 @@
 const { getCurrentOutdoorAirQuality } = require("../services/airQualityProvider");
-const { getUserSetup, saveUserSetup } = require("../data/database");
+const {
+  getUserSetup,
+  saveUserProviderAqiHistory,
+  saveUserSetup
+} = require("../data/database");
 
 async function getCurrent(request, response) {
   const stored = getUserSetup(request.user.id);
@@ -20,6 +24,7 @@ async function getCurrent(request, response) {
       ...stored.setup,
       outdoorAirQuality: airQuality
     });
+    saveUserProviderAqiHistory(request.user.id, airQuality, location.placeName);
     return response.json({ success: true, airQuality });
   } catch (error) {
     if (error.statusCode === 400) {

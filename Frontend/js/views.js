@@ -8,6 +8,27 @@ function hasCompleteSensorReadings(environment) {
   );
 }
 
+function getVerifiedSavedOutdoorAirQuality() {
+  const user = API.getCurrentUser();
+  if (!Number.isSafeInteger(user?.id)) return null;
+  const setup = API.getCachedAccountSetup();
+  const location = setup?.location;
+  const airQuality = setup?.outdoorAirQuality;
+  if (
+    !location ||
+    !airQuality ||
+    !Number.isFinite(airQuality.aqi) ||
+    airQuality.latitude !== location.latitude ||
+    airQuality.longitude !== location.longitude ||
+    airQuality.source !== 'Google Maps Platform Air Quality API (Universal AQI)' ||
+    typeof airQuality.lastUpdated !== 'string' ||
+    Number.isNaN(Date.parse(airQuality.lastUpdated))
+  ) {
+    return null;
+  }
+  return { location, airQuality };
+}
+
 const Views = {
   // Navigation Sidebar
   renderSidebar(activeView = 'dashboard') {
@@ -138,18 +159,50 @@ const Views = {
 
   // Metrics Row
   renderMetricsBar(env) {
-    const outdoorAqi = Number.isFinite(env?.outdoorAQI) ? env.outdoorAQI : null;
-    const indoorAqi = Number.isFinite(env?.indoorAQI) ? env.indoorAQI : null;
-    const co2 = Number.isFinite(env?.co2) ? env.co2 : null;
-    const temp = Number.isFinite(env?.temperature) ? env.temperature : null;
-    const humidity = Number.isFinite(env?.humidity) ? env.humidity : null;
-    const occupancy = Number.isFinite(env?.occupancy) ? env.occupancy : null;
+    const isDemoAccount = !Number.isSafeInteger(API.getCurrentUser()?.id);
+    const savedProvider = getVerifiedSavedOutdoorAirQuality();
+    const verifiedSensorData = env?.source === 'hardware' && env?.verified === true;
+    const simulatedDemo = isDemoAccount;
+    const outdoorAqi = savedProvider?.airQuality.aqi ??
+      (verifiedSensorData || simulatedDemo
+        ? (Number.isFinite(env?.outdoorAQI) ? env.outdoorAQI : null)
+        : null);
+    const indoorAqi = verifiedSensorData || simulatedDemo
+      ? (Number.isFinite(env?.indoorAQI) ? env.indoorAQI : null)
+      : null;
+    const co2 = verifiedSensorData || simulatedDemo
+      ? (Number.isFinite(env?.co2) ? env.co2 : null)
+      : null;
+    const temp = verifiedSensorData || simulatedDemo
+      ? (Number.isFinite(env?.temperature) ? env.temperature : null)
+      : null;
+    const humidity = verifiedSensorData || simulatedDemo
+      ? (Number.isFinite(env?.humidity) ? env.humidity : null)
+      : null;
+    const occupancy = verifiedSensorData || simulatedDemo
+      ? (Number.isFinite(env?.occupancy) ? env.occupancy : null)
+      : null;
 
     const outStatus = outdoorAqi === null ? null : Utils.getAqiStatus(outdoorAqi);
     const inStatus = indoorAqi === null ? null : Utils.getAqiStatus(indoorAqi);
     const co2Status = co2 === null ? null : Utils.getCo2Status(co2);
     const tempStatus = temp === null ? null : Utils.getTempStatus(temp);
     const humStatus = humidity === null ? null : Utils.getHumidityStatus(humidity);
+    const outdoorLabel = savedProvider
+      ? 'Verified outdoor AQI'
+      : simulatedDemo
+        ? 'Simulated demo outdoor AQI'
+        : 'Outdoor AQI';
+    const outdoorStatus = savedProvider
+      ? savedProvider.airQuality.category
+      : simulatedDemo && outdoorAqi !== null
+        ? 'Simulated'
+        : outStatus?.label || 'Unavailable';
+    const providerDetails = savedProvider
+      ? `${savedProvider.location.placeName} · ${savedProvider.airQuality.source} · observed ${new Date(savedProvider.airQuality.lastUpdated).toLocaleString()}`
+      : simulatedDemo && outdoorAqi !== null
+        ? 'Simulated demo data · not a provider reading'
+        : 'No verified AQI history available yet.';
 
     return `
       <section class="metrics-grid">
@@ -161,18 +214,19 @@ const Views = {
               <span class="metric-mini-dot" style="background:#d97706"></span>
               <span class="metric-mini-dot" style="background:#ea580c"></span>
             </div>
-            <span class="metric-title">Outdoor AQI</span>
+            <span class="metric-title">${outdoorLabel}</span>
           </div>
           <div class="metric-body">
             <span class="metric-value">${outdoorAqi ?? '—'}</span>
-            <span class="metric-pill ${outStatus ? `pill-${outStatus.level}` : 'pill-neutral'}">${outStatus?.label || 'Unavailable'}</span>
+            <span class="metric-pill ${savedProvider ? 'pill-neutral' : outStatus ? `pill-${outStatus.level}` : 'pill-neutral'}">${outdoorStatus}</span>
           </div>
+          <span class="metric-source">${Utils.escapeHtml(providerDetails)}</span>
         </div>
 
         <!-- Indoor AQI -->
         <div class="metric-card">
           <div class="metric-header">
-            <span class="metric-title">Indoor AQI</span>
+            <span class="metric-title">${simulatedDemo ? 'Simulated demo indoor AQI' : 'Indoor AQI'}</span>
           </div>
           <div class="metric-body">
             <span class="metric-value">${indoorAqi ?? '—'}</span>
@@ -183,7 +237,7 @@ const Views = {
         <!-- CO2 -->
         <div class="metric-card">
           <div class="metric-header">
-            <span class="metric-title">CO₂</span>
+            <span class="metric-title">${simulatedDemo ? 'Simulated demo CO₂' : 'CO₂'}</span>
           </div>
           <div class="metric-body">
             <span class="metric-value">${co2 ?? '—'} ${co2 === null ? '' : '<small>ppm</small>'}</span>
@@ -194,7 +248,7 @@ const Views = {
         <!-- Temperature -->
         <div class="metric-card">
           <div class="metric-header">
-            <span class="metric-title">Temperature</span>
+            <span class="metric-title">${simulatedDemo ? 'Simulated demo temperature' : 'Temperature'}</span>
           </div>
           <div class="metric-body">
             <span class="metric-value">${temp ?? '—'} ${temp === null ? '' : '<small>°C</small>'}</span>
@@ -205,7 +259,7 @@ const Views = {
         <!-- Humidity -->
         <div class="metric-card">
           <div class="metric-header">
-            <span class="metric-title">Humidity</span>
+            <span class="metric-title">${simulatedDemo ? 'Simulated demo humidity' : 'Humidity'}</span>
           </div>
           <div class="metric-body">
             <span class="metric-value">${humidity ?? '—'} ${humidity === null ? '' : '<small>%</small>'}</span>
@@ -216,7 +270,7 @@ const Views = {
         <!-- Occupancy -->
         <div class="metric-card">
           <div class="metric-header">
-            <span class="metric-title">Occupancy</span>
+            <span class="metric-title">${simulatedDemo ? 'Simulated demo occupancy' : 'Occupancy'}</span>
           </div>
           <div class="metric-body">
             <span class="metric-value">${occupancy ?? '—'}</span>
@@ -1182,11 +1236,12 @@ const Views = {
               </select>
             </div>
             <div class="chart-legend">
-              <span class="legend-item" id="analytics-data-status">Loading account history…</span>
+              <span class="legend-item" id="analytics-data-status">Loading verified account history…</span>
             </div>
           </div>
 
           <div class="canvas-chart-wrapper">
+            <p id="analytics-empty-state" role="status" hidden>No verified AQI history available yet.</p>
             <canvas id="analytics-chart-canvas" width="900" height="300"></canvas>
           </div>
         </div>
@@ -1195,26 +1250,26 @@ const Views = {
         <div class="analytics-stats-grid">
           <div class="stat-card">
             <span class="stat-label">Automatic actions</span>
-            <span class="stat-value">12</span>
-            <span class="stat-sub">Last 24 hours</span>
+            <span class="stat-value" id="analytics-automatic-actions">Unavailable</span>
+            <span class="stat-sub">No verified action history available.</span>
           </div>
 
           <div class="stat-card">
             <span class="stat-label">Manual overrides</span>
-            <span class="stat-value">3</span>
-            <span class="stat-sub">User interventions</span>
+            <span class="stat-value" id="analytics-manual-overrides">Unavailable</span>
+            <span class="stat-sub">No verified override history available.</span>
           </div>
 
           <div class="stat-card">
             <span class="stat-label">Avg. Indoor AQI</span>
-            <span class="stat-value">38</span>
-            <span class="stat-sub">Good category rating</span>
+            <span class="stat-value" id="analytics-indoor-average">Unavailable</span>
+            <span class="stat-sub">No verified indoor AQI history available.</span>
           </div>
 
           <div class="stat-card">
             <span class="stat-label">HEPA Filter Life</span>
-            <span class="stat-value">88%</span>
-            <span class="stat-sub">~4,200 operating hours remaining</span>
+            <span class="stat-value" id="analytics-filter-life">Unavailable</span>
+            <span class="stat-sub">No filter-life measurement source is connected.</span>
           </div>
         </div>
       </div>
@@ -1585,6 +1640,7 @@ const Views = {
                 </div>
 
                 <p id="signup-error" role="alert" aria-live="polite" style="display:none; color:#b91c1c; font-size:13px; margin:0;"></p>
+                <button type="button" class="link-btn-toggle-auth" id="btn-signup-recover-account" hidden>Check by signing in</button>
                 <button type="submit" class="btn btn-primary btn-block btn-auth-submit">
                   <span>Create account</span> ${Utils.icons.arrowRight}
                 </button>
@@ -2132,7 +2188,7 @@ const Views = {
               <span class="assistant-sparkle-badge">${Utils.icons.sparkles}</span>
               <h2 class="page-title">AI Assistant & Co-Pilot</h2>
             </div>
-            <p class="page-subtitle">Ask about your account readings, safety decisions, and supported backend controls.</p>
+            <p class="page-subtitle">Rule-based assistant; no LLM, Ollama, or n8n service is connected. Ask about account readings, safety decisions, and supported backend controls. Backend state does not confirm physical hardware.</p>
           </div>
           <div class="assistant-header-actions">
             <span class="assistant-context-pill">

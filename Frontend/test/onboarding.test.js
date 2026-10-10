@@ -17,6 +17,10 @@ function makeElement(properties = {}) {
     click() {
       return this.listeners.click?.({ preventDefault() {}, stopPropagation() {} });
     },
+    keydown(key) {
+      const event = { key, prevented: false, preventDefault() { this.prevented = true; } };
+      return { event, result: this.listeners.keydown?.(event) };
+    },
     change() {
       return this.listeners.change?.({ target: this });
     },
@@ -40,6 +44,8 @@ function createOnboardingHarness(initialRooms = [{
   let savedRooms = null;
   let currentSettings = { tempUnit: "celsius", notificationsEnabled: true };
   const saveOrder = [];
+  const savedAccountSetups = [];
+  const searchedQueries = [];
   let nextRoomId = 1;
 
   const rooms = [...initialRooms];
@@ -134,6 +140,7 @@ function createOnboardingHarness(initialRooms = [{
     },
     Utils: {
       icons: { check: "check", arrowRight: "right" },
+      escapeHtml: value => String(value),
       generateId: prefix => `${prefix}-new`,
       showToast() {}
     },
@@ -167,6 +174,7 @@ function createOnboardingHarness(initialRooms = [{
       },
       async saveAccountSetup(setup) {
         saveOrder.push(setup.setupCompleted ? "account-complete" : "account-draft");
+        savedAccountSetups.push(JSON.parse(JSON.stringify(setup)));
         return { success: true, setupComplete: setup.setupCompleted, setup };
       },
       async lookupOutdoorAirQuality(latitude, longitude) {
@@ -181,7 +189,9 @@ function createOnboardingHarness(initialRooms = [{
           longitude
         };
       },
-      async searchIndianLocations() {
+      async searchIndianLocations(query) {
+        searchedQueries.push(query);
+        if (searchError) throw searchError;
         return [{
           placeName: "Bengaluru, Karnataka, India",
           latitude: 12.9716,
@@ -217,6 +227,7 @@ function createOnboardingHarness(initialRooms = [{
   const vmContext = vm.createContext(context);
   let geolocationResult = null;
   let providerError = null;
+  let searchError = null;
   vm.runInContext(appSource, vmContext);
   context.App = vm.runInContext("App", vmContext);
   context.App.renderCurrentApplicationState = function renderAfterSetup() {
@@ -245,8 +256,11 @@ function createOnboardingHarness(initialRooms = [{
     get savedSettings() { return savedSettings; },
     get savedUserUpdates() { return savedUserUpdates; },
     get saveOrder() { return saveOrder; },
+    get savedAccountSetups() { return savedAccountSetups; },
+    get searchedQueries() { return searchedQueries; },
     setGeolocationResult(value) { geolocationResult = value; },
     setProviderError(error) { providerError = error; },
+    setSearchError(error) { searchError = error; },
     makeInput
   };
 }
@@ -539,12 +553,52 @@ test("Indian location search selection is saved as a manual location", async () 
 
   await setup.elements()["btn-onboarding-search-location"].click();
   assert.equal(App.onboardingLocationSearchResults.length, 1);
-  await App.selectOnboardingLocation(App.onboardingLocationSearchResults[0]);
+  assert.deepEqual(setup.searchedQueries, ["Bengaluru"]);
+  const resultButton = setup.elements().locationResultButton;
+  assert.equal(typeof resultButton.listeners.click, "function");
+  await resultButton.click();
 
   assert.equal(App.onboardingLocation.source, "manual");
   assert.equal(App.onboardingLocation.placeName, "Bengaluru, Karnataka, India");
   assert.equal(App.onboardingLocation.latitude, 12.9716);
   assert.match(setup.elements()["onboarding-location-summary"].textContent, /Manually entered/);
+  assert.ok(setup.savedAccountSetups.some(saved =>
+    saved.location?.placeName === "Bengaluru, Karnataka, India"
+  ));
+  assert.equal(setup.savedAccountSetups.at(-1).location.longitude, 77.5946);
+});
+
+test("location search supports Enter and missing Google configuration leaves manual coordinates usable", async () => {
+  const setup = createOnboardingHarness();
+  const { App } = setup.context;
+  App.onboardingLocation = null;
+  App.renderOnboardingStep(4);
+  App.attachOnboardingEvents();
+  setup.setSearchError(new Error(
+    "Google Maps location search is not configured. Enter latitude and longitude manually."
+  ));
+  const searchInput = setup.elements()["onboarding-location-search"];
+  searchInput.value = "Chennai";
+
+  const { event, result } = searchInput.keydown("Enter");
+  assert.equal(event.prevented, true);
+  await result;
+  assert.deepEqual(setup.searchedQueries, ["Chennai"]);
+  assert.match(
+    setup.elements()["onboarding-location-feedback"].textContent,
+    /not configured.*manual latitude\/longitude/i
+  );
+
+  setup.elements()["onboarding-manual-latitude"].value = "13.0827";
+  setup.elements()["onboarding-manual-longitude"].value = "80.2707";
+  await setup.elements()["btn-onboarding-save-manual-location"].click();
+
+  assert.equal(App.onboardingLocation.source, "manual");
+  assert.equal(App.onboardingLocation.latitude, 13.0827);
+  assert.ok(setup.savedAccountSetups.some(saved =>
+    saved.location?.latitude === 13.0827 &&
+    saved.location.longitude === 80.2707
+  ));
 });
 
 test("setup cannot complete without a saved location", async () => {

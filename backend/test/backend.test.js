@@ -18,7 +18,8 @@ const {
   databasePath,
   getUserByEmail,
   saveAppliedDecision,
-  saveSensorReading
+  saveSensorReading,
+  saveUserProviderAqiHistory
 } = require("../src/data/database");
 const { restorePersistedState } = require("../src/data/restorePersistedState");
 const {
@@ -68,6 +69,7 @@ function clearDatabase() {
     DELETE FROM password_reset_tokens;
     DELETE FROM user_sessions;
     DELETE FROM user_aqi_history;
+    DELETE FROM user_provider_aqi_history;
     DELETE FROM user_environment_state;
     DELETE FROM user_setups;
     DELETE FROM users;
@@ -119,6 +121,7 @@ const scenarios = [
 
 let server;
 let baseUrl;
+let loseRegistrationResponse;
 
 function restoreState() {
   clearDatabase();
@@ -164,10 +167,29 @@ async function registerAndLogin(email) {
 }
 
 beforeEach(async () => {
+  loseRegistrationResponse = false;
   restoreState();
   const app = express();
   app.use(express.json());
   app.use(createSessionMiddleware());
+  app.use((request, response, next) => {
+    if (
+      loseRegistrationResponse &&
+      request.method === "POST" &&
+      request.path === "/api/auth/register"
+    ) {
+      loseRegistrationResponse = false;
+      const endResponse = response.end.bind(response);
+      response.end = (...args) => {
+        if (response.statusCode === 201) {
+          response.destroy();
+          return response;
+        }
+        return endResponse(...args);
+      };
+    }
+    next();
+  });
   app.use("/api/auth", authRoutes);
   app.use("/api/account", accountRoutes);
   app.get("/api/test/private", requireAuthenticatedUser, (request, response) => {
@@ -334,6 +356,30 @@ test("registration stores the submitted account name and creates its authenticat
   assert.equal(login.status, 200);
   assert.equal(login.body.user.name, "Test Account");
   assert.match(login.headers.get("set-cookie"), /breathe\.sid=/);
+});
+
+test("account committed before a lost signup response can be recovered through login", async () => {
+  const email = "lost-response@example.com";
+  const password = "correct horse battery staple";
+  loseRegistrationResponse = true;
+
+  await assert.rejects(fetch(`${baseUrl}/auth/register`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: "Recovered User", email, password })
+  }));
+
+  assert.ok(getUserByEmail(email), "registration committed before the response was lost");
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM users").get().count, 1);
+
+  const login = await requestJson("/auth/login", {
+    method: "POST",
+    body: { email, password }
+  });
+
+  assert.equal(login.status, 200);
+  assert.equal(login.body.user.email, email);
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM users").get().count, 1);
 });
 
 test("registration rejects duplicate emails after normalization", async () => {
@@ -578,6 +624,7 @@ test("account setup is isolated to the authenticated user and rejects client-inv
     headers: { cookie: first.cookie },
     body: setup
   });
+
   assert.equal(saved.status, 200);
   assert.equal(saved.body.setupComplete, true);
 
@@ -617,6 +664,103 @@ test("account setup is isolated to the authenticated user and rejects client-inv
   });
   assert.equal(inventedAqi.status, 400);
   assert.match(inventedAqi.body.error, /configured air-quality provider/);
+});
+
+test("Manual mode persists per account and prevents automatic decisions from replacing device settings", async () => {
+  const manual = await registerAndLogin("manual-mode@example.com");
+  const other = await registerAndLogin("auto-mode@example.com");
+  const manualSetup = {
+    setupCompleted: false,
+    controlMode: "MANUAL",
+    rooms: [{
+      id: "office",
+      name: "Office",
+      mode: "MANUAL",
+      devices: [{ type: "window" }, { type: "ventilation" }, { type: "purifier" }]
+    }],
+    devices: { window: true, ventilation: true, purifier: true },
+    preferences: null,
+    location: null,
+    outdoorAirQuality: null
+  };
+  const saved = await requestJson("/account/setup", {
+    method: "PUT",
+    headers: { cookie: manual.cookie },
+    body: manualSetup
+  });
+  assert.equal(saved.status, 200);
+
+  const pollutedSensors = {
+    room: "Office",
+    outdoorAQI: 250,
+    indoorAQI: 60,
+    co2: 700,
+    temperature: 24,
+    humidity: 50,
+    occupancy: 1
+  };
+  const sensorResponse = await requestJson("/sensors", {
+    method: "PUT",
+    headers: { cookie: manual.cookie },
+    body: pollutedSensors
+  });
+  assert.equal(sensorResponse.status, 200);
+  const manualDevices = {
+    windows: "CLOSED",
+    purifier: "ON",
+    ventilation: "FILTERED",
+    mode: "PURIFICATION"
+  };
+  const deviceResponse = await requestJson("/devices", {
+    method: "PUT",
+    headers: { cookie: manual.cookie },
+    body: manualDevices
+  });
+  assert.equal(deviceResponse.status, 200);
+
+  const cleanSensors = { ...pollutedSensors, outdoorAQI: 40, indoorAQI: 35 };
+  await requestJson("/sensors", {
+    method: "PUT",
+    headers: { cookie: manual.cookie },
+    body: cleanSensors
+  });
+  const decision = await requestJson("/decision", {
+    headers: { cookie: manual.cookie }
+  });
+  const blocked = await requestJson("/decision/apply", {
+    method: "POST",
+    headers: { cookie: manual.cookie },
+    body: decision.body.decision
+  });
+  assert.equal(blocked.status, 409);
+  assert.equal(blocked.body.applied, false);
+  assert.match(blocked.body.error, /Manual mode is enabled/);
+
+  const persistedDevices = await requestJson("/devices", {
+    headers: { cookie: manual.cookie }
+  });
+  assert.deepEqual(persistedDevices.body.deviceState, manualDevices);
+  const otherSetup = await requestJson("/account/setup", {
+    headers: { cookie: other.cookie }
+  });
+  assert.equal(otherSetup.body.setup.controlMode, undefined);
+
+  const autoSensors = await requestJson("/sensors", {
+    method: "PUT",
+    headers: { cookie: other.cookie },
+    body: { ...cleanSensors, room: "Other room" }
+  });
+  assert.equal(autoSensors.status, 200);
+  const autoDecision = await requestJson("/decision", {
+    headers: { cookie: other.cookie }
+  });
+  const applied = await requestJson("/decision/apply", {
+    method: "POST",
+    headers: { cookie: other.cookie },
+    body: autoDecision.body.decision
+  });
+  assert.equal(applied.status, 200);
+  assert.equal(applied.body.deviceState.windows, "OPEN");
 });
 
 test("provider configuration failure returns unavailable without storing an AQI", async () => {
@@ -664,6 +808,111 @@ test("provider configuration failure returns unavailable without storing an AQI"
   assert.equal(setup.body.setup.outdoorAirQuality, null);
 });
 
+test("provider AQI without its observation timestamp is rejected rather than timestamped locally", async () => {
+  const account = await registerAndLogin("provider-missing-time@example.com");
+  const setup = await requestJson("/account/setup", {
+    method: "PUT",
+    headers: { cookie: account.cookie },
+    body: {
+      setupCompleted: false,
+      rooms: [],
+      devices: { window: false, ventilation: false, purifier: false },
+      preferences: null,
+      location: {
+        latitude: 37.7749,
+        longitude: -122.4194,
+        accuracy: null,
+        recordedAt: new Date().toISOString(),
+        source: "manual",
+        placeName: "San Francisco, CA"
+      },
+      outdoorAirQuality: null
+    }
+  });
+  assert.equal(setup.status, 200);
+  const previousApiKey = process.env.GOOGLE_MAPS_AIR_QUALITY_API_KEY;
+  const previousFetch = global.fetch;
+  process.env.GOOGLE_MAPS_AIR_QUALITY_API_KEY = "test-provider-key";
+  global.fetch = async (url, options) => {
+    if (String(url).startsWith("https://airquality.googleapis.com/")) {
+      return {
+        ok: true,
+        async json() {
+          return { indexes: [{ code: "uaqi", aqi: 33, category: "Good" }] };
+        }
+      };
+    }
+    return previousFetch(url, options);
+  };
+  try {
+    const response = await requestJson("/account/outdoor-air-quality", {
+      method: "POST",
+      headers: { cookie: account.cookie },
+      body: {}
+    });
+    assert.equal(response.status, 502);
+    assert.match(response.body.error, /unavailable/);
+    const history = await requestJson("/account/analytics?range=24H", {
+      headers: { cookie: account.cookie }
+    });
+    assert.deepEqual(history.body.readings, []);
+  } finally {
+    global.fetch = previousFetch;
+    if (previousApiKey === undefined) {
+      delete process.env.GOOGLE_MAPS_AIR_QUALITY_API_KEY;
+    } else {
+      process.env.GOOGLE_MAPS_AIR_QUALITY_API_KEY = previousApiKey;
+    }
+  }
+});
+
+test("manual locations persist only to the authenticated account", async () => {
+  const first = await registerAndLogin("first-location@example.com");
+  const second = await registerAndLogin("second-location@example.com");
+  const firstLocation = {
+    latitude: 12.9716,
+    longitude: 77.5946,
+    accuracy: null,
+    recordedAt: new Date().toISOString(),
+    source: "manual",
+    placeName: "Bengaluru, Karnataka, India"
+  };
+  const secondLocation = {
+    latitude: 19.076,
+    longitude: 72.8777,
+    accuracy: null,
+    recordedAt: new Date().toISOString(),
+    source: "manual",
+    placeName: "Mumbai, Maharashtra, India"
+  };
+
+  for (const [account, location] of [[first, firstLocation], [second, secondLocation]]) {
+    const saved = await requestJson("/account/setup", {
+      method: "PUT",
+      headers: { cookie: account.cookie },
+      body: {
+        setupCompleted: false,
+        rooms: [],
+        devices: { window: false, ventilation: false, purifier: false },
+        preferences: null,
+        location,
+        outdoorAirQuality: null
+      }
+    });
+    assert.equal(saved.status, 200);
+  }
+
+  const firstSetup = await requestJson("/account/setup", {
+    headers: { cookie: first.cookie }
+  });
+  const secondSetup = await requestJson("/account/setup", {
+    headers: { cookie: second.cookie }
+  });
+  assert.deepEqual(firstSetup.body.setup.location, firstLocation);
+  assert.deepEqual(secondSetup.body.setup.location, secondLocation);
+  assert.notDeepEqual(firstSetup.body.setup.location, secondSetup.body.setup.location);
+});
+
 test("provider AQI comes from a current provider response and is saved only for its account location", async () => {
   const account = await registerAndLogin("provider-success@example.com");
   const location = {
@@ -700,7 +949,10 @@ test("provider AQI comes from a current provider response and is saved only for 
     return {
       ok: true,
       async json() {
-        return { indexes: [{ code: "uaqi", aqi: 52, category: "Good" }] };
+        return {
+          dateTime: "2026-10-10T04:00:00Z",
+          indexes: [{ code: "uaqi", aqi: 52, category: "Good" }]
+        };
       }
     };
   };
@@ -712,6 +964,7 @@ test("provider AQI comes from a current provider response and is saved only for 
     });
     assert.equal(response.status, 200);
     assert.equal(response.body.airQuality.aqi, 52);
+    assert.equal(response.body.airQuality.lastUpdated, "2026-10-10T04:00:00.000Z");
     assert.equal(response.body.airQuality.source, "Google Maps Platform Air Quality API (Universal AQI)");
     assert.equal(providerRequest.options.method, "POST");
     assert.deepEqual(JSON.parse(providerRequest.options.body), {
@@ -732,6 +985,62 @@ test("provider AQI comes from a current provider response and is saved only for 
       process.env.GOOGLE_MAPS_AIR_QUALITY_API_KEY = previousApiKey;
     }
   }
+});
+
+test("analytics returns only verified, in-range provider observations for the signed-in account", async () => {
+  const first = await registerAndLogin("analytics-first@example.com");
+  const second = await registerAndLogin("analytics-second@example.com");
+  const now = Date.now();
+  const reading = (aqi, recordedAt) => ({
+    aqi,
+    category: "Good",
+    source: "Google Maps Platform Air Quality API (Universal AQI)",
+    unit: "AQI index (unitless)",
+    latitude: 12.9716,
+    longitude: 77.5946,
+    lastUpdated: recordedAt
+  });
+  saveUserProviderAqiHistory(
+    first.userId,
+    reading(46, new Date(now - 60 * 60 * 1000).toISOString()),
+    "Bengaluru, India"
+  );
+  saveUserProviderAqiHistory(
+    first.userId,
+    reading(80, new Date(now - 31 * 24 * 60 * 60 * 1000).toISOString()),
+    "Bengaluru, India"
+  );
+  saveUserProviderAqiHistory(
+    second.userId,
+    reading(99, new Date(now - 30 * 60 * 1000).toISOString()),
+    "Mumbai, India"
+  );
+
+  const firstHistory = await requestJson("/account/analytics?range=24H", {
+    headers: { cookie: first.cookie }
+  });
+  assert.equal(firstHistory.status, 200);
+  assert.equal(firstHistory.body.readings.length, 1);
+  assert.equal(firstHistory.body.readings[0].value, 46);
+  assert.equal(firstHistory.body.readings[0].placeName, "Bengaluru, India");
+  assert.equal(firstHistory.body.readings[0].metric, "outdoorAQI");
+  assert.equal(firstHistory.body.summary.verifiedOutdoorSamples, 1);
+  assert.equal(firstHistory.body.summary.indoorAQIAverage, null);
+  assert.equal(firstHistory.body.summary.automaticActions, null);
+  assert.equal(firstHistory.body.summary.manualOverrides, null);
+  assert.equal(firstHistory.body.summary.filterLife, null);
+
+  const secondHistory = await requestJson("/account/analytics?range=24H", {
+    headers: { cookie: second.cookie }
+  });
+  assert.equal(secondHistory.body.readings.length, 1);
+  assert.equal(secondHistory.body.readings[0].value, 99);
+  assert.equal(secondHistory.body.readings[0].placeName, "Mumbai, India");
+
+  const unsupportedRange = await requestJson("/account/analytics?range=all", {
+    headers: { cookie: first.cookie }
+  });
+  assert.equal(unsupportedRange.status, 400);
 });
 
 test("new account sensor, decision, device and AQI state stays isolated by authenticated user", async () => {

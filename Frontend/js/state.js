@@ -66,29 +66,22 @@ const State = {
   async setMode(roomId, newMode) {
     const room = this.getRoom(roomId);
     if (!room || room.mode === newMode) return;
-
-    const oldMode = room.mode;
-    room.mode = newMode;
-    await API.setRoomMode(roomId, newMode);
-
-    const logText = newMode === 'AUTO' 
-      ? 'Breathe Clean resumed control.' 
-      : 'User took manual control of devices.';
-    
-    await API.logActivity(
-      roomId, 
-      'YOU', 
-      `Switched to ${newMode === 'AUTO' ? 'Auto' : 'Manual'} mode`, 
-      logText
-    );
-
-    // Refresh rooms state from storage
-    this.rooms = API.getRooms();
-
-    if (newMode === 'AUTO') {
-      this.evaluateActiveRoom(true);
+    if (!['AUTO', 'MANUAL'].includes(newMode)) {
+      throw new Error('Choose Auto or Manual mode.');
     }
 
+    const oldMode = room.mode;
+    await API.setRoomMode(roomId, newMode);
+    this.rooms = API.getRooms();
+    await API.logActivity(
+      roomId,
+      'YOU',
+      `Switched to ${newMode === 'AUTO' ? 'Auto' : 'Manual'} mode`,
+      newMode === 'AUTO'
+        ? 'Breathe Clean resumed control.'
+        : 'User took manual control of devices.'
+    );
+    this.rooms = API.getRooms();
     this.notify('mode_changed', { roomId, mode: newMode, oldMode });
   },
 
@@ -260,7 +253,12 @@ const State = {
       throw new Error('The backend returned invalid device states or an invalid air-quality decision.');
     }
 
-    room.environment = { ...room.environment, ...data.sensors };
+    room.environment = {
+      ...room.environment,
+      ...data.sensors,
+      source: data.sensorsSource || 'unverified',
+      simulated: data.simulated === true
+    };
     const displayDeviceStates = {
       window: data.devices.windows === 'OPEN' ? 'Open' : 'Closed',
       ventilation: data.devices.ventilation.charAt(0) + data.devices.ventilation.slice(1).toLowerCase(),
@@ -306,6 +304,9 @@ const State = {
   },
 
   async applyDashboardDecision() {
+    if (this.getActiveRoom()?.mode === 'MANUAL') {
+      throw new Error('Manual mode is enabled; automatic decisions are not applied.');
+    }
     const currentData = await API.getDashboardData();
     const result = await API.applyDashboardDecision(currentData.decision);
     this.applyDashboardDataFromBackend(await API.getDashboardData());
@@ -315,6 +316,15 @@ const State = {
 
   async applyDashboardScenario(scenario) {
     const simulation = await API.runDashboardScenario(scenario);
+    if (this.getActiveRoom()?.mode === 'MANUAL') {
+      this.applyDashboardDataFromBackend({
+        sensors: simulation.sensorData,
+        devices: (await API.getDashboardData()).devices,
+        decision: simulation.decision
+      });
+      this.notify('environment_updated', this.getActiveRoom());
+      return { ...simulation, simulated: true, applied: false };
+    }
     const applied = await API.applyDashboardDecision(simulation.decision);
     this.applyDashboardDataFromBackend(await API.getDashboardData());
     this.notify('environment_updated', this.getActiveRoom());
@@ -324,7 +334,9 @@ const State = {
   async updateDashboardSensors(updates) {
     await API.updateDashboardSensors(updates);
     const currentData = await API.getDashboardData();
-    await API.applyDashboardDecision(currentData.decision);
+    if (this.getActiveRoom()?.mode !== 'MANUAL') {
+      await API.applyDashboardDecision(currentData.decision);
+    }
     this.applyDashboardDataFromBackend(await API.getDashboardData());
     this.notify('environment_updated', this.getActiveRoom());
   },
@@ -411,8 +423,8 @@ const State = {
       try {
         const result = await this.applyDashboardDecision();
         return { success: true, message: result?.reason || 'Actuators optimized according to current IAQ conditions.' };
-      } catch {
-        return { success: true, message: 'Actuators synchronized with optimal setpoints.' };
+      } catch (error) {
+        return { success: false, message: error.message };
       }
     }
 
@@ -421,25 +433,8 @@ const State = {
     try {
       const result = await this.applyDashboardPreset(mapped);
       return { success: true, message: `Active mode: ${result?.deviceState?.mode || mapped.toUpperCase()}` };
-    } catch {
-      const win = room.devices?.find(d => d.type === 'window');
-      const vent = room.devices?.find(d => d.type === 'ventilation');
-      const pur = room.devices?.find(d => d.type === 'purifier');
-      if (mapped === 'flush') {
-        if (win) win.state = (room.environment?.outdoorAQI <= 60) ? 'Open' : 'Closed';
-        if (vent) vent.state = 'High';
-        if (pur) pur.state = 'Active';
-      } else if (mapped === 'eco' || mapped === 'sleep') {
-        if (win) win.state = 'Closed';
-        if (vent) vent.state = 'Low';
-        if (pur) pur.state = 'Active';
-      } else if (mapped === 'seal') {
-        if (win) win.state = 'Closed';
-        if (vent) vent.state = 'Filtered';
-        if (pur) pur.state = 'Active';
-      }
-      this.notify('device_updated', { roomId });
-      return { success: true, message: `Preset "${presetName}" applied.` };
+    } catch (error) {
+      return { success: false, message: error.message };
     }
   },
 
