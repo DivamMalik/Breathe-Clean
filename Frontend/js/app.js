@@ -474,7 +474,7 @@ const App = {
         if (
           State.activeView === 'dashboard' ||
           State.activeView === 'simulation' ||
-          (State.activeView === 'devices' && event === 'room_changed')
+          State.activeView === 'devices'
         ) {
           bodyContainer.innerHTML = this.renderActiveViewContent();
           this.attachViewSpecificEvents();
@@ -1444,7 +1444,7 @@ const App = {
     if (!canvas) return;
     const emptyState = document.getElementById('analytics-empty-state');
     const dataStatus = document.getElementById('analytics-data-status');
-    const metric = document.getElementById('analytics-metric-select')?.value || 'indoorAQI';
+    const metric = document.getElementById('analytics-metric-select')?.value || 'outdoorAQI';
     const rangeMs = {
       '24H': 24 * 60 * 60 * 1000,
       '7D': 7 * 24 * 60 * 60 * 1000,
@@ -1527,6 +1527,22 @@ const App = {
       const y = padTop + plotH - ((reading.value - minVal) / (maxVal - minVal || 1)) * plotH;
       return { x, y, reading };
     });
+
+    if (coords.length > 1 && ctx.createLinearGradient) {
+      const gradient = ctx.createLinearGradient(0, padTop, 0, padTop + plotH);
+      gradient.addColorStop(0, 'rgba(21, 128, 61, 0.22)');
+      gradient.addColorStop(1, 'rgba(21, 128, 61, 0.01)');
+      ctx.beginPath();
+      ctx.moveTo(coords[0].x, coords[0].y);
+      for (let i = 0; i < coords.length - 1; i++) {
+        ctx.lineTo(coords[i + 1].x, coords[i + 1].y);
+      }
+      ctx.lineTo(coords[coords.length - 1].x, padTop + plotH);
+      ctx.lineTo(coords[0].x, padTop + plotH);
+      ctx.closePath();
+      ctx.fillStyle = gradient;
+      ctx.fill();
+    }
 
     ctx.beginPath();
     ctx.moveTo(coords[0].x, coords[0].y);
@@ -2507,6 +2523,11 @@ const App = {
 
         if (pw !== confirmPw) {
           showSignupError('Passwords do not match.');
+          return;
+        }
+
+        if (pw.length < 12) {
+          showSignupError('Password must be at least 12 characters.');
           return;
         }
 

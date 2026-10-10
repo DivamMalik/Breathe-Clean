@@ -18,9 +18,10 @@ restorePersistedState();
 const app = express();
 
 const configuredCorsOrigin = process.env.CORS_ORIGIN;
-app.use(cors(configuredCorsOrigin
-  ? { origin: configuredCorsOrigin, credentials: true }
-  : undefined));
+app.use(cors({
+  origin: configuredCorsOrigin || true,
+  credentials: true
+}));
 app.use(express.json());
 app.use(createSessionMiddleware());
 

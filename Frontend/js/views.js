@@ -1218,9 +1218,9 @@ const Views = {
             <div class="chart-title-group">
               <span class="chart-title">Air quality over time</span>
               <select class="chart-metric-select" id="analytics-metric-select">
+                <option value="outdoorAQI" selected>Outdoor AQI (Provider)</option>
                 <option value="indoorAQI">Indoor AQI</option>
                 <option value="co2">CO₂ (ppm)</option>
-                <option value="outdoorAQI">Outdoor AQI</option>
               </select>
             </div>
             <div class="chart-legend">
@@ -1611,7 +1611,7 @@ const Views = {
                 <div class="form-field">
                   <label for="signup-password">Password</label>
                   <div class="input-password-wrapper">
-                    <input type="password" id="signup-password" placeholder="Create a password" autocomplete="new-password" required />
+                    <input type="password" id="signup-password" minlength="12" placeholder="Create password (min 12 characters)" autocomplete="new-password" required />
                     <button type="button" class="btn-toggle-pw" aria-label="Toggle password visibility">${Utils.icons.eye}</button>
                   </div>
                 </div>
@@ -1619,7 +1619,7 @@ const Views = {
                 <div class="form-field">
                   <label for="signup-password-confirm">Confirm password</label>
                   <div class="input-password-wrapper">
-                    <input type="password" id="signup-password-confirm" placeholder="Confirm your password" autocomplete="new-password" required />
+                    <input type="password" id="signup-password-confirm" minlength="12" placeholder="Confirm password (min 12 characters)" autocomplete="new-password" required />
                     <button type="button" class="btn-toggle-pw" aria-label="Toggle password visibility">${Utils.icons.eye}</button>
                   </div>
                 </div>
