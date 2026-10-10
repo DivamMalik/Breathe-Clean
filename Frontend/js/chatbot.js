@@ -1,4 +1,3 @@
-/* Breathe Clean - Rule-Based Assistant & Backend Control Co-Pilot */
 
 function hasCompleteChatSensorReadings(environment) {
   return Boolean(
@@ -103,7 +102,6 @@ const Chatbot = {
     this.messages.push(userMsg);
     this.save();
 
-    // Run local intent handling and supported backend actions.
     let reply;
     try {
       reply = await this.interpretAndExecute(trimmed);
@@ -173,9 +171,6 @@ const Chatbot = {
       };
     }
 
-    // -------------------------------------------------------------
-    // 1. SYSTEM MODE CONTROL (AUTO vs MANUAL)
-    // -------------------------------------------------------------
     if (isDirectCommand(q) && (q.includes('manual mode') || q.includes('take manual control'))) {
       if (activeRoom) {
         await State.setMode(activeRoom.id, 'MANUAL');
@@ -255,9 +250,6 @@ const Chatbot = {
       }
     }
 
-    // -------------------------------------------------------------
-    // 2. DEVICE CONTROLS: SMART WINDOWS
-    // -------------------------------------------------------------
     if (isDirectCommand(q) && (q.includes('open window') || q.includes('open the window') || q.includes('open windows'))) {
       if (activeRoom) {
         const winDev = activeRoom.devices.find(d => d.type === 'window');
@@ -290,9 +282,6 @@ const Chatbot = {
       }
     }
 
-    // -------------------------------------------------------------
-    // 3. DEVICE CONTROLS: AIR PURIFIER
-    // -------------------------------------------------------------
     if (isDirectCommand(q) && (q.includes('purifier') || q.includes('air purifier') || q.includes('hepa'))) {
       if (activeRoom) {
         const purDev = activeRoom.devices.find(d => d.type === 'purifier');
@@ -332,9 +321,6 @@ const Chatbot = {
       }
     }
 
-    // -------------------------------------------------------------
-    // 4. DEVICE CONTROLS: VENTILATION
-    // -------------------------------------------------------------
     if (isDirectCommand(q) && (q.includes('ventilation') || q.includes('hvac') || q.includes('fan'))) {
       if (activeRoom) {
         const ventDev = activeRoom.devices.find(d => d.type === 'ventilation');
@@ -372,9 +358,6 @@ const Chatbot = {
       }
     }
 
-    // -------------------------------------------------------------
-    // 5. NAVIGATION ACROSS VIEWS
-    // -------------------------------------------------------------
     const navMap = {
       'dashboard': 'dashboard',
       'main dashboard': 'dashboard',
@@ -404,9 +387,6 @@ const Chatbot = {
       }
     }
 
-    // -------------------------------------------------------------
-    // 6. ROOM / SPACE SWITCHING
-    // -------------------------------------------------------------
     for (const room of State.rooms) {
       const roomLower = room.name.toLowerCase();
       if (isDirectCommand(q) && (q.includes(`switch to ${roomLower}`) || q.includes(`go to ${roomLower}`) || q.includes(`open ${roomLower}`) || q.includes(`select ${roomLower}`))) {
@@ -421,7 +401,6 @@ const Chatbot = {
       }
     }
 
-    // Duplicate Space
     if (isDirectCommand(q) && (q.includes('duplicate room') || q.includes('duplicate space') || q.includes('clone room') || q.includes('clone space'))) {
       if (activeRoom) {
         const copy = await State.duplicateRoom(activeRoom.id);
@@ -434,7 +413,6 @@ const Chatbot = {
       }
     }
 
-    // Create New Space
     const createMatch = q.match(/(?:create|add|new)\s+(?:space|room)\s+(?:called\s+|named\s+)?([a-z0-9\s]+)/i);
     if (isDirectCommand(q) && createMatch && !q.includes('duplicate')) {
       let newName = createMatch[1].trim();
@@ -460,9 +438,6 @@ const Chatbot = {
       }
     }
 
-    // -------------------------------------------------------------
-    // 7. SIMULATION SCENARIO & ENVIRONMENTAL ADJUSTMENTS
-    // -------------------------------------------------------------
     if (isDirectCommand(q) && (q.includes('smog') || q.includes('pollution spike') || q.includes('outdoor pollution') || q.includes('bad outdoor air'))) {
       if (activeRoom) {
         const result = await State.applyDashboardScenario('pollution');
@@ -499,7 +474,6 @@ const Chatbot = {
       }
     }
 
-    // Explicit Numerical Environmental Adjustments
     let envUpdated = false;
     let envUpdates = {};
 
@@ -568,9 +542,6 @@ const Chatbot = {
       };
     }
 
-    // -------------------------------------------------------------
-    // 8. SETTINGS & PREFERENCES
-    // -------------------------------------------------------------
     if (isDirectCommand(q) && (q.includes('fahrenheit') || (q.includes('unit') && q.includes('f')))) {
       const s = API.getSettings();
       s.tempUnit = 'fahrenheit';
@@ -670,9 +641,6 @@ const Chatbot = {
       };
     }
 
-    // -------------------------------------------------------------
-    // 10. CURRENT AIR QUALITY STATUS / SUMMARY REPORT
-    // -------------------------------------------------------------
     if (q.includes('status') || q.includes('air quality') || q.includes('how is the air') || q.includes('report') || q.includes('summary')) {
       if (activeRoom) {
         const env = activeRoom.environment || {};
@@ -703,9 +671,6 @@ const Chatbot = {
       }
     }
 
-    // -------------------------------------------------------------
-    // 11. GENERAL IAQ & ENVIRONMENTAL EDUCATION / Q&A
-    // -------------------------------------------------------------
     if (q.includes('co2') || q.includes('carbon dioxide')) {
       return {
         text: `**Indoor carbon dioxide (CO₂)** is commonly used as an indicator of ventilation and occupancy. It is not a direct measurement of oxygen level or overall air safety. Interpret a reading using the sensor’s calibration and applicable guidance; this educational answer does not provide a current measurement.`
@@ -718,7 +683,6 @@ const Chatbot = {
       };
     }
 
-    // Default friendly assistant fallback
     return {
       text: `I couldn't match *"${query}"* to a supported assistant action. You can ask about your saved location and available readings, request a safety-validated backend device-state update, run a supported simulation, or navigate to a view. Physical hardware actuation is not confirmed.`
     };

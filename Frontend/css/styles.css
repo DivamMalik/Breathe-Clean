@@ -1,9 +1,7 @@
-/* Breathe Clean - Design System & Stylesheet */
 
 :root {
   --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  
-  /* Color Palette */
+
   --color-brand-primary: #15803d;
   --color-brand-hover: #166534;
   --color-brand-dark: #0f392b;
@@ -19,15 +17,14 @@
   --color-bg-app: #f4f6f4;
   --color-bg-card: #ffffff;
   --color-bg-secondary: #f9fafb;
-  
+
   --color-text-primary: #111827;
   --color-text-secondary: #4b5563;
   --color-text-muted: #9ca3af;
-  
+
   --color-border-subtle: #e5e7eb;
   --color-border-hover: #d1d5db;
 
-  /* Qualitative Status Colors */
   --status-good-text: #15803d;
   --status-good-bg: #ecfdf5;
   --status-good-border: #bbf7d0;
@@ -44,7 +41,6 @@
   --status-poor-bg: #fef2f2;
   --status-poor-border: #fecaca;
 
-  /* Shadows & Radii */
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 14px;
@@ -60,7 +56,6 @@
   --transition-normal: 240ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* Base Reset */
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
@@ -97,7 +92,6 @@ a {
   text-decoration: none;
 }
 
-/* Layout Architecture */
 .app-layout {
   display: flex;
   height: 100vh;
@@ -105,7 +99,6 @@ a {
   overflow: hidden;
 }
 
-/* Sidebar */
 .app-sidebar {
   width: 220px;
   min-width: 220px;
@@ -214,7 +207,6 @@ a {
   color: #fca5a5;
 }
 
-/* Main Area */
 .app-main-area {
   flex: 1;
   display: flex;
@@ -223,7 +215,6 @@ a {
   background-color: var(--color-bg-app);
 }
 
-/* Header */
 .app-header {
   height: 72px;
   background-color: #ffffff;
@@ -266,7 +257,6 @@ a {
   gap: 20px;
 }
 
-/* Room Selector */
 .room-selector-wrapper {
   position: relative;
 }
@@ -399,7 +389,6 @@ a {
   background: var(--color-brand-light);
 }
 
-/* System Mode Segmented Control */
 .mode-control-container {
   display: flex;
   align-items: center;
@@ -434,7 +423,6 @@ a {
   color: #34d399;
 }
 
-/* Live Mode Status Indicator */
 .mode-status-indicator {
   display: flex;
   align-items: center;
@@ -482,7 +470,6 @@ a {
   color: var(--color-text-muted);
 }
 
-/* Header Right */
 .header-right {
   display: flex;
   align-items: center;
@@ -552,7 +539,6 @@ a {
   transform: scale(1.05);
 }
 
-/* Body Container */
 .app-body-container {
   flex: 1;
   overflow-y: auto;
@@ -564,7 +550,6 @@ a {
   margin: 0 auto;
 }
 
-/* Environmental Metrics Grid */
 .metrics-grid {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
@@ -672,7 +657,6 @@ a {
   border: 1px solid var(--color-border-subtle);
 }
 
-/* Fluid Dashboard View Container */
 .view-content.view-dashboard {
   max-width: 100%;
   width: 100%;
@@ -683,7 +667,6 @@ a {
   padding-bottom: 28px;
 }
 
-/* Master Command & Quick Action Strip */
 .dashboard-action-toolbar {
   background: #ffffff;
   border: 1px solid var(--color-border-subtle);
@@ -804,7 +787,6 @@ a {
   box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.25);
 }
 
-/* Dashboard Main Grid (Fluid 4-Card Multi-Column Alignment) */
 .dashboard-grid {
   display: grid;
   grid-template-columns: 1.8fr 1.6fr 1.5fr 1.6fr;
@@ -862,7 +844,6 @@ a {
   text-decoration: underline;
 }
 
-/* Room View Card */
 .card-room-view {
   padding: 14px;
 }
@@ -898,7 +879,6 @@ a {
   background: #10b981;
 }
 
-/* Integrated HUD Overlay on Canvas */
 .room-canvas-container {
   position: relative;
   width: 100%;
@@ -1063,7 +1043,6 @@ a {
   color: var(--color-text-primary);
 }
 
-/* Current System Decision Card */
 .decision-head-left {
   display: flex;
   align-items: center;
@@ -1239,7 +1218,6 @@ a {
   color: var(--color-text-primary);
 }
 
-/* Devices Card & Actuator List */
 .devices-list {
   display: flex;
   flex-direction: column;
@@ -1347,7 +1325,6 @@ a {
   border-color: #111827;
 }
 
-/* Devices Card Header & Footer */
 .devices-count-pill {
   font-size: 10.5px;
   font-weight: 600;
@@ -1396,7 +1373,6 @@ a {
   border-color: #ea580c;
 }
 
-/* Activity Badge & Footer */
 .activity-badge-live {
   font-size: 10.5px;
   font-weight: 600;
@@ -1440,7 +1416,6 @@ a {
   border-color: var(--color-border-hover);
 }
 
-/* Visual Activity Timeline Cards */
 .activity-timeline {
   display: flex;
   flex-direction: column;
@@ -1608,7 +1583,6 @@ a {
   animation: pulse-dot 2s infinite;
 }
 
-/* Executive Standards Modal */
 .modal-dialog-lg {
   width: 100%;
   max-width: 820px;
@@ -1936,7 +1910,6 @@ a {
   filter: brightness(1.08);
 }
 
-/* Secondary Operational Deck (Diagnostics, Differentials, Presets) */
 .dashboard-diagnostics-deck {
   display: grid;
   grid-template-columns: 1.6fr 1.3fr 1.7fr;
@@ -2005,7 +1978,6 @@ a {
   border: 1px solid #e2e8f0;
 }
 
-/* Differential Bars */
 .differential-bar-container {
   display: flex;
   flex-direction: column;
@@ -2084,7 +2056,6 @@ a {
   color: var(--color-text-muted);
 }
 
-/* Sensor Array Health Matrix */
 .sensor-health-list {
   display: flex;
   flex-direction: column;
@@ -2168,7 +2139,6 @@ a {
   border-color: var(--color-border-hover);
 }
 
-/* 1-Click Operational Presets Grid */
 .diag-desc {
   font-size: 11.5px;
   color: var(--color-text-secondary);
@@ -2232,7 +2202,6 @@ a {
   color: var(--color-text-muted);
 }
 
-/* Responsive Breakpoints for Fluid Dashboard */
 @media (max-width: 1400px) {
   .dashboard-grid {
     grid-template-columns: 1.8fr 1.5fr 1.35fr 1.35fr;
@@ -2270,7 +2239,6 @@ a {
   }
 }
 
-/* Page Headers (Spaces, Simulation, Analytics, Devices, Settings) */
 .view-page-header {
   display: flex;
   align-items: center;
@@ -2291,7 +2259,6 @@ a {
   margin-top: 2px;
 }
 
-/* Button System */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -2356,7 +2323,6 @@ a {
   font-size: 15px;
 }
 
-/* Spaces Page Grid */
 .spaces-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -2480,7 +2446,6 @@ a {
   margin-top: auto;
 }
 
-/* Simulation Page */
 .sim-presets-bar {
   display: flex;
   align-items: center;
@@ -2673,7 +2638,6 @@ a {
   margin-top: 2px;
 }
 
-/* Analytics View */
 .analytics-time-pills {
   display: flex;
   background: #ffffff;
@@ -2793,7 +2757,6 @@ a {
   color: var(--color-text-muted);
 }
 
-/* Devices Table */
 .devices-table-card {
   background: #ffffff;
   border: 1px solid var(--color-border-subtle);
@@ -2885,7 +2848,6 @@ a {
   color: var(--color-brand-primary);
 }
 
-/* Settings View */
 .settings-sections {
   display: flex;
   flex-direction: column;
@@ -2943,7 +2905,6 @@ a {
   color: var(--color-brand-primary);
 }
 
-/* Switch */
 .switch {
   position: relative;
   display: inline-block;
@@ -2993,7 +2954,6 @@ input:checked + .slider-round:before {
   background: #ffffff;
 }
 
-/* Auth Split View */
 .auth-page-container {
   display: flex;
   height: 100vh;
@@ -3289,7 +3249,6 @@ input:checked + .slider-round:before {
   display: none;
 }
 
-/* First-Time Onboarding Flow */
 .onboarding-page-container {
   min-height: 100vh;
   background: var(--color-bg-app);
@@ -3480,7 +3439,6 @@ input:checked + .slider-round:before {
   margin: 0 auto 20px auto;
 }
 
-/* Modals & Dialogs */
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -3583,7 +3541,6 @@ input:checked + .slider-round:before {
   animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* Step 2: Live Room Geometry Calculation Box */
 .calc-metrics-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -3615,7 +3572,6 @@ input:checked + .slider-round:before {
   color: var(--color-brand-primary);
 }
 
-/* Step 3: Devices Config Grid */
 .devices-config-grid {
   display: flex;
   flex-direction: column;
@@ -3672,7 +3628,6 @@ input:checked + .slider-round:before {
   color: var(--color-text-muted);
 }
 
-/* Step 4: Review Summary Box */
 .review-summary-card {
   background: #ffffff;
   border: 1px solid var(--color-border-subtle);
@@ -3817,7 +3772,6 @@ input:checked + .slider-round:before {
   border-top: 1px solid var(--color-border-subtle);
 }
 
-/* Small Dialogs (Mode Confirm & Sign Out) */
 .modal-sm-dialog {
   max-width: 400px;
   padding: 24px;
@@ -3866,7 +3820,6 @@ input:checked + .slider-round:before {
   justify-content: center;
 }
 
-/* Sign Out Card (Matching Screenshot Bottom-Right) */
 .modal-signout-card {
   width: 340px;
   padding: 28px 24px;
@@ -3909,7 +3862,6 @@ input:checked + .slider-round:before {
   gap: 8px;
 }
 
-/* Toast Notifications */
 .toast-container {
   position: fixed;
   bottom: 24px;
@@ -3956,12 +3908,10 @@ input:checked + .slider-round:before {
   margin-left: 6px;
 }
 
-/* Utility Helpers */
 .text-muted { color: var(--color-text-muted); }
 .text-center { text-align: center; }
 .mb-3 { margin-bottom: 12px; }
 
-/* Responsive Media Queries */
 @media (max-width: 1200px) {
   .dashboard-grid {
     grid-template-columns: 1fr 1fr;
@@ -4041,10 +3991,6 @@ input:checked + .slider-round:before {
     grid-template-columns: 1fr;
   }
 }
-
-/* ============================================================= */
-/* AI Assistant & Co-Pilot Styles                                */
-/* ============================================================= */
 
 .assistant-title-row {
   display: flex;
@@ -4379,10 +4325,6 @@ input:checked + .slider-round:before {
   opacity: 0.8;
 }
 
-/* ============================================================= */
-/* Floating Assistant Widget                                      */
-/* ============================================================= */
-
 .floating-assistant-wrapper {
   position: fixed;
   bottom: 24px;
@@ -4390,7 +4332,6 @@ input:checked + .slider-round:before {
   z-index: 250;
 }
 
-/* Hide floating assistant widget when inside the dedicated AI Assistant page */
 .app-layout:has(.view-assistant) ~ .floating-assistant-wrapper,
 body:has(.view-assistant) .floating-assistant-wrapper {
   display: none !important;
@@ -4624,9 +4565,6 @@ body:has(.view-assistant) .floating-assistant-wrapper {
   background: var(--color-brand-hover);
 }
 
-/* ==========================================================================
-   Google OAuth Dialog & Identity Services
-   ========================================================================== */
 .google-auth-backdrop {
   display: flex;
   align-items: center;
@@ -4805,9 +4743,6 @@ body:has(.view-assistant) .floating-assistant-wrapper {
   text-decoration: underline;
 }
 
-/* ==========================================================================
-   Dashboard Refined Telemetry Animated Entrance
-   ========================================================================== */
 .dashboard-telemetry-banner {
   display: flex;
   align-items: center;
@@ -4896,7 +4831,6 @@ body:has(.view-assistant) .floating-assistant-wrapper {
   letter-spacing: 0.02em;
 }
 
-/* Cards Staggered Animation upon Dashboard Entrance */
 .dashboard-loading-anim .dash-card {
   animation: dashCardEnter 0.42s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
@@ -4917,7 +4851,6 @@ body:has(.view-assistant) .floating-assistant-wrapper {
   }
 }
 
-/* Subtle Shimmer across Metric Cards */
 .dashboard-loading-anim .metric-card {
   position: relative;
   overflow: hidden;
@@ -4952,7 +4885,6 @@ body:has(.view-assistant) .floating-assistant-wrapper {
   100% { left: 220%; }
 }
 
-/* Reduced Motion Support */
 @media (prefers-reduced-motion: reduce) {
   *, ::before, ::after {
     animation-duration: 0.01ms !important;
@@ -4962,9 +4894,6 @@ body:has(.view-assistant) .floating-assistant-wrapper {
   }
 }
 
-/* ==========================================================================
-   Google OAuth 2-Minute Setup Modal & Controls
-   ========================================================================== */
 .google-setup-hint-row {
   margin: 10px 0 16px 0;
   display: flex;
@@ -5284,7 +5213,6 @@ body:has(.view-assistant) .floating-assistant-wrapper {
   justify-content: center;
 }
 
-/* Standards Modal Responsive Breakpoints */
 @media (max-width: 768px) {
   .modal-dialog-lg {
     max-width: 95vw;
@@ -5332,4 +5260,3 @@ body:has(.view-assistant) .floating-assistant-wrapper {
     justify-content: center;
   }
 }
-

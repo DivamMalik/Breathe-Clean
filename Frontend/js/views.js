@@ -1,4 +1,3 @@
-/* Breathe Clean - View Components & UI Rendering */
 
 function hasCompleteSensorReadings(environment) {
   return Boolean(
@@ -30,7 +29,7 @@ function getVerifiedSavedOutdoorAirQuality() {
 }
 
 const Views = {
-  // Navigation Sidebar
+
   renderSidebar(activeView = 'dashboard') {
     const navItems = [
       { id: 'dashboard', label: 'Dashboard', icon: Utils.icons.dashboard },
@@ -73,7 +72,6 @@ const Views = {
     `;
   },
 
-  // Top Header Bar
   renderHeader(user, room) {
     const isAuto = room ? room.mode === 'AUTO' : true;
     const now = new Date();
@@ -157,7 +155,6 @@ const Views = {
     `;
   },
 
-  // Metrics Row
   renderMetricsBar(env) {
     const isDemoAccount = !Number.isSafeInteger(API.getCurrentUser()?.id);
     const savedProvider = getVerifiedSavedOutdoorAirQuality();
@@ -281,7 +278,6 @@ const Views = {
     `;
   },
 
-  // Main Dashboard View
   renderDashboard(room) {
     if (!room) {
       return `
@@ -316,7 +312,6 @@ const Views = {
     const indoorAqi = Number.isFinite(env.indoorAQI) ? env.indoorAQI : 38;
     const co2 = Number.isFinite(env.co2) ? env.co2 : 640;
 
-    // Filtration efficiency differential calculation
     const reductionPercent = Math.max(0, Math.min(99, Math.round(((outdoorAqi - indoorAqi) / (outdoorAqi || 1)) * 100)));
     const airChangesHour = isAuto && winDev.state === 'Open' ? '5.4' : (ventDev.state === 'High' ? '4.8' : (ventDev.state === 'Filtered' ? '3.9' : '2.8'));
     const cleanAirRate = purDev.state === 'High' ? '480' : (purDev.state === 'Active' || purDev.state === 'ON' ? '290' : (purDev.state === 'Low' ? '140' : '0'));
@@ -394,7 +389,7 @@ const Views = {
 
               <img src="${room.image}" alt="${room.name}" class="room-canvas-bg" id="room-canvas-bg" />
               <canvas id="airflow-canvas" class="airflow-canvas"></canvas>
-              
+
               <!-- Floating Live Telemetry Overlay Badges -->
               <div class="room-canvas-overlay-badges">
                 <span class="room-badge-indicator badge-window">
@@ -732,7 +727,6 @@ const Views = {
     `;
   },
 
-  // Visual Activity Item Generator (Icons, State Transition Badges, Sources)
   renderActivityCard(act) {
     const rawAction = act.action || '';
     const rawDetail = act.detail || '';
@@ -740,7 +734,6 @@ const Views = {
     const timeStr = Utils.formatTime(new Date(act.timestamp));
     const timeAgoStr = Utils.timeAgo(act.timestamp);
 
-    // Determine category icon and styling
     let icon = Utils.icons.shieldCheck;
     let category = 'system';
     let iconBg = '#ecfdf5';
@@ -775,7 +768,6 @@ const Views = {
       iconColor = '#ea580c';
     }
 
-    // Parse state transition (e.g. "Low -> High" or "Closed -> Open" or "Normal -> High")
     let transitionHtml = '';
     const combined = rawAction + ' ' + rawDetail;
     const arrowMatch = combined.match(/([A-Za-z0-9°\s]{2,14})\s*(?:->|→)\s*([A-Za-z0-9°\s]{2,14})/);
@@ -792,7 +784,7 @@ const Views = {
           <span class="state-pill state-to">${Utils.escapeHtml(toState)}</span>
         </div>
       `;
-      // Don't duplicate the text if detail was just the transition
+
       if (rawDetail.includes('→') || rawDetail.includes('->')) {
         displayDetail = '';
       }
@@ -818,7 +810,6 @@ const Views = {
     `;
   },
 
-  // Interactive Executive-Grade ASHRAE 62.1-2022 Standards Compliance Modal
   renderStandardsModal(room) {
     const env = (room && room.environment) || {};
     const outdoorAQI = Number.isFinite(env.outdoorAQI) ? env.outdoorAQI : null;
@@ -942,7 +933,6 @@ const Views = {
     `;
   },
 
-  // Spaces Page View
   renderSpaces(rooms) {
     return `
       <div class="view-content view-spaces">
@@ -1026,7 +1016,6 @@ const Views = {
     `;
   },
 
-  // Simulation Page View
   renderSimulation(room) {
     const env = room?.environment || {};
     if (!hasCompleteSensorReadings(env)) {
@@ -1209,7 +1198,6 @@ const Views = {
     `;
   },
 
-  // Analytics View
   renderAnalytics() {
     return `
       <div class="view-content view-analytics">
@@ -1276,9 +1264,8 @@ const Views = {
     `;
   },
 
-  // Devices View
   renderDevices(rooms) {
-    // Gather all devices from all rooms
+
     const allDevices = [];
     const roomList = Array.isArray(rooms) ? rooms : (State.rooms || []);
     roomList.forEach(room => {
@@ -1359,7 +1346,6 @@ const Views = {
     `;
   },
 
-  // Settings View
   renderSettings(user) {
     const settings = API.getSettings();
 
@@ -1473,7 +1459,6 @@ const Views = {
     `;
   },
 
-  // Auth Screen (Sign In / Sign Up split view matching reference)
   renderAuth(mode = 'signin') {
     return `
       <div class="auth-page-container">
@@ -1677,7 +1662,6 @@ const Views = {
     `;
   },
 
-  // First-Time Onboarding Flow (Account -> Spaces -> Devices -> Preferences -> Ready)
   renderOnboarding(step = 1) {
     const rooms = State.rooms.length ? State.rooms : API.getRooms();
     const user = State.user || {};
@@ -1876,7 +1860,6 @@ const Views = {
     `;
   },
 
-  // Add / Edit Space Multi-step Modal (Matching Reference Modal)
   renderSpaceModal(roomToEdit = null) {
     const isEdit = !!roomToEdit;
     const name = roomToEdit ? roomToEdit.name : '';
@@ -2126,7 +2109,6 @@ const Views = {
     `;
   },
 
-  // Mode Switch Confirmation Modal (Custom dialog)
   renderModeConfirmModal(targetMode) {
     const isToManual = targetMode === 'MANUAL';
     const title = isToManual ? 'Switch to manual control?' : 'Resume automatic control?';
@@ -2152,7 +2134,6 @@ const Views = {
     `;
   },
 
-  // Format Chat Markdown & lists
   formatChatMessage(text) {
     if (!text) return '';
     let html = Utils.escapeHtml(text);
@@ -2165,7 +2146,6 @@ const Views = {
     return html;
   },
 
-  // Full AI Assistant Workspace View
   renderAssistant(room) {
     const isAuto = room ? room.mode === 'AUTO' : true;
     const messages = Chatbot.messages || [];
@@ -2263,7 +2243,6 @@ const Views = {
     `;
   },
 
-  // Floating AI Assistant Drawer Widget (available across all views)
   renderFloatingAssistantWidget() {
     return `
       <div class="floating-assistant-wrapper" id="floating-assistant-wrapper">
@@ -2322,7 +2301,6 @@ const Views = {
     `;
   },
 
-  // Sign Out Confirmation Modal (Matching Bottom-Right Screenshot Reference)
   renderSignOutModal() {
     return `
       <div class="modal-backdrop" id="signout-modal-backdrop">
@@ -2341,7 +2319,6 @@ const Views = {
     `;
   },
 
-  // Google authentication is not connected to the backend yet.
   renderGoogleAccountPickerModal() {
     return `
       <div class="modal-backdrop google-auth-backdrop" id="google-auth-backdrop">
@@ -2363,7 +2340,6 @@ const Views = {
     `;
   },
 
-  // 2-Minute Google Cloud Console OAuth Setup Modal
   renderGoogleSetupModal() {
     const existingId = API.getGoogleClientId();
     const currentOrigin = (typeof window !== 'undefined' && window.location && window.location.origin && window.location.origin !== 'null') 

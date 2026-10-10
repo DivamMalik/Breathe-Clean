@@ -1,4 +1,3 @@
-/* Breathe Clean - Main Application Controller & Orchestration */
 
 const App = {
   airflowAnimId: null,
@@ -20,7 +19,6 @@ const App = {
     State.init();
     Chatbot.init();
 
-    // Check hash route if present
     const hash = window.location.hash.replace('#', '').toLowerCase();
     if (['dashboard', 'spaces', 'simulation', 'analytics', 'devices', 'assistant', 'settings'].includes(hash)) {
       State.activeView = hash;
@@ -52,18 +50,15 @@ const App = {
       }
     }
 
-    // Check auth & onboarding state
     this.renderCurrentApplicationState();
     if (restoreError) {
       Utils.showToast('Your account session could not be restored. Sign in to load your saved setup.', 'warning');
     }
 
-    // Subscribe to state changes
     State.subscribe((event, data) => {
       this.handleStateChange(event, data);
     });
 
-    // Hash change listener
     window.addEventListener('hashchange', () => {
       const newHash = window.location.hash.replace('#', '').toLowerCase();
       if (['dashboard', 'spaces', 'simulation', 'analytics', 'devices', 'assistant', 'settings'].includes(newHash)) {
@@ -87,7 +82,6 @@ const App = {
       }
     });
 
-    // Start background live clock
     setInterval(() => this.updateClock(), 1000);
   },
 
@@ -95,7 +89,6 @@ const App = {
     const appRoot = document.getElementById('app-root');
     const user = State.user;
 
-    // Check if user is logged in
     if (!user) {
       this.stopAirflowSimulation();
       appRoot.innerHTML = Views.renderAuth('signin');
@@ -103,7 +96,6 @@ const App = {
       return;
     }
 
-    // Check if user needs onboarding
     if (user.isOnboarded === false) {
       this.stopAirflowSimulation();
       this.prepareOnboardingForUser(user);
@@ -112,7 +104,6 @@ const App = {
       return;
     }
 
-    // Render Main Shell
     const activeRoom = State.getActiveRoom();
     appRoot.innerHTML = `
       <div class="app-layout" id="app-layout">
@@ -468,10 +459,10 @@ const App = {
         }
       }
     } else if (event === 'room_changed' || event === 'mode_changed' || event === 'evaluated' || event === 'device_updated' || event === 'environment_updated') {
-      // Re-render header & current view to keep synchronized
+
       const activeRoom = State.getActiveRoom();
       const user = State.user;
-      
+
       const headerElem = document.querySelector('.app-header');
       if (headerElem && user) {
         headerElem.outerHTML = Views.renderHeader(user, activeRoom);
@@ -663,13 +654,9 @@ const App = {
     });
   },
 
-  // -------------------------------------------------------------
-  // Events: Shell & Navigation
-  // -------------------------------------------------------------
   attachGlobalShellEvents() {
     this.attachHeaderEvents();
 
-    // Sidebar navigation
     document.querySelectorAll('.sidebar-nav .nav-item').forEach(btn => {
       btn.addEventListener('click', () => {
         const view = btn.dataset.view;
@@ -682,7 +669,6 @@ const App = {
       });
     });
 
-    // Mobile sidebar toggle
     const mobileMenuBtn = document.getElementById('mobile-menu-btn');
     const mobileSidebarClose = document.getElementById('mobile-sidebar-close');
     const sidebar = document.getElementById('app-sidebar');
@@ -698,7 +684,6 @@ const App = {
       });
     }
 
-    // Sign out trigger button
     const signOutBtn = document.getElementById('btn-sign-out-trigger');
     if (signOutBtn) {
       signOutBtn.addEventListener('click', () => {
@@ -710,7 +695,7 @@ const App = {
   },
 
   attachHeaderEvents() {
-    // Room Selector Dropdown
+
     const roomBtn = document.getElementById('room-selector-btn');
     const roomDropdown = document.getElementById('room-dropdown-menu');
 
@@ -745,7 +730,6 @@ const App = {
       }
     }
 
-    // Mode Toggle Segmented Control (AUTO / MANUAL)
     document.querySelectorAll('.mode-segmented-pill .mode-segment-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
         const targetMode = btn.dataset.mode;
@@ -760,7 +744,6 @@ const App = {
       });
     });
 
-    // Profile button shortcut to settings
     const profileBtn = document.getElementById('btn-header-profile');
     if (profileBtn) {
       profileBtn.addEventListener('click', () => {
@@ -768,7 +751,6 @@ const App = {
       });
     }
 
-    // Notifications button
     const notifBtn = document.getElementById('btn-notifications');
     if (notifBtn) {
       notifBtn.addEventListener('click', () => {
@@ -896,9 +878,6 @@ const App = {
     }
   },
 
-  // -------------------------------------------------------------
-  // Dashboard Management Actions & Actuator Orchestration
-  // -------------------------------------------------------------
   attachDashboardEvents() {
     const refreshDashboardButton = document.getElementById('btn-refresh-dashboard-data');
     if (refreshDashboardButton) {
@@ -907,7 +886,6 @@ const App = {
       });
     }
 
-    // 1. Direct interactive device controls
     document.querySelectorAll('.device-interactive-controls').forEach(group => {
       const deviceId = group.dataset.deviceId;
       group.querySelectorAll('.btn-ctrl').forEach(btn => {
@@ -924,7 +902,6 @@ const App = {
       });
     });
 
-    // 2. Master Command Bar actions
     const btnOptimize = document.getElementById('btn-quick-optimize');
     if (btnOptimize) {
       btnOptimize.addEventListener('click', async () => {
@@ -1008,7 +985,6 @@ const App = {
       });
     }
 
-    // 3. Room View CFD speed & mode controls
     document.querySelectorAll('.sim-speed-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('.sim-speed-btn').forEach(b => b.classList.remove('active'));
@@ -1027,7 +1003,6 @@ const App = {
       });
     }
 
-    // 4. Decision card actions
     const btnReevaluate = document.getElementById('btn-force-reevaluate');
     if (btnReevaluate) {
       btnReevaluate.addEventListener('click', async () => {
@@ -1048,7 +1023,6 @@ const App = {
       });
     }
 
-    // 5. Actuators footer actions
     const btnSyncAll = document.getElementById('btn-sync-all-devices');
     if (btnSyncAll) {
       btnSyncAll.addEventListener('click', async () => {
@@ -1080,7 +1054,6 @@ const App = {
       });
     }
 
-    // 6. Activity controls
     const btnRefreshActivity = document.getElementById('btn-refresh-activity');
     if (btnRefreshActivity) {
       btnRefreshActivity.addEventListener('click', () => {
@@ -1123,7 +1096,6 @@ const App = {
       });
     }
 
-    // 7. 1-Click Operational Presets
     document.querySelectorAll('.preset-btn[data-preset]').forEach(btn => {
       btn.addEventListener('click', async () => {
         const preset = btn.dataset.preset;
@@ -1168,7 +1140,6 @@ const App = {
       });
     }
 
-    // Quick navigation buttons
     document.querySelectorAll('[data-nav]').forEach(el => {
       el.addEventListener('click', () => {
         const target = el.dataset.nav;
@@ -1182,9 +1153,6 @@ const App = {
     }
   },
 
-  // -------------------------------------------------------------
-  // AI Assistant Full Workspace Events
-  // -------------------------------------------------------------
   attachAssistantViewEvents() {
     const form = document.getElementById('assistant-composer-form');
     const input = document.getElementById('assistant-prompt-input');
@@ -1198,10 +1166,8 @@ const App = {
     };
     scrollToBottom();
 
-    // Auto-scroll on initial render
     setTimeout(scrollToBottom, 60);
 
-    // Suggestion chips
     document.querySelectorAll('.chat-suggestion-chip').forEach(chip => {
       chip.addEventListener('click', async () => {
         const prompt = chip.dataset.prompt;
@@ -1212,7 +1178,6 @@ const App = {
       });
     });
 
-    // Clear chat
     if (clearBtn) {
       clearBtn.addEventListener('click', () => {
         Chatbot.clearHistory();
@@ -1221,7 +1186,6 @@ const App = {
       });
     }
 
-    // Submit prompt
     if (form && input) {
       input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -1273,13 +1237,9 @@ const App = {
       container.scrollTop = container.scrollHeight;
     }
 
-    // Also refresh floating messages if drawer exists
     this.refreshFloatingDrawerMessages();
   },
 
-  // -------------------------------------------------------------
-  // Floating AI Assistant Drawer Events
-  // -------------------------------------------------------------
   attachFloatingAssistantEvents() {
     const toggleBtn = document.getElementById('btn-floating-assistant');
     const drawer = document.getElementById('floating-chat-drawer');
@@ -1312,7 +1272,6 @@ const App = {
       });
     }
 
-    // Mini suggestions in floating drawer
     document.querySelectorAll('.floating-drawer-suggestions .mini-chip').forEach(chip => {
       chip.addEventListener('click', async () => {
         const prompt = chip.dataset.prompt;
@@ -1326,7 +1285,6 @@ const App = {
       });
     });
 
-    // Floating form submission
     if (form && input) {
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -1361,9 +1319,6 @@ const App = {
     msgBox.scrollTop = msgBox.scrollHeight;
   },
 
-  // -------------------------------------------------------------
-  // Simulation Page Event Listeners
-  // -------------------------------------------------------------
   attachSimulationEvents() {
     const activeRoom = State.getActiveRoom();
     if (!activeRoom) return;
@@ -1412,7 +1367,7 @@ const App = {
     if (!activeRoom) return;
 
     const decision = activeRoom.decision || Engine.decide(activeRoom.environment, activeRoom, activeRoom.devices);
-    
+
     const titleEl = document.getElementById('sim-reaction-title');
     const reasonEl = document.getElementById('sim-reaction-reason');
     const outcomeEl = document.getElementById('sim-reaction-outcome');
@@ -1428,9 +1383,6 @@ const App = {
     if (purEl) purEl.textContent = decision.purifier;
   },
 
-  // -------------------------------------------------------------
-  // Analytics Canvas Line Chart
-  // -------------------------------------------------------------
   attachAnalyticsEvents() {
     document.querySelectorAll('.analytics-time-pills .time-filter-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -1548,7 +1500,6 @@ const App = {
     const minVal = observedMin - padding;
     const maxVal = observedMax + padding;
 
-    // Grid lines & Y Axis Labels
     ctx.strokeStyle = '#e5e7eb';
     ctx.lineWidth = 1;
     ctx.fillStyle = '#9ca3af';
@@ -1620,9 +1571,6 @@ const App = {
     }
   },
 
-  // -------------------------------------------------------------
-  // Settings Events
-  // -------------------------------------------------------------
   attachSettingsEvents() {
     const defaultModeChoice = document.getElementById('settings-default-mode');
     if (defaultModeChoice) {
@@ -1676,9 +1624,6 @@ const App = {
     }
   },
 
-  // -------------------------------------------------------------
-  // Dynamic Airflow & Technical Room View Simulation Engine
-  // -------------------------------------------------------------
   startAirflowSimulation() {
     this.stopAirflowSimulation();
 
@@ -1697,7 +1642,6 @@ const App = {
     };
     resize();
 
-    // Initialize streamline particles
     this.particles = [];
     const count = 38;
     for (let i = 0; i < count; i++) {
@@ -1722,15 +1666,13 @@ const App = {
 
       ctx.clearRect(0, 0, w, h);
 
-      // Draw subtle technical airflow grid & zone guides
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
       ctx.lineWidth = 1;
       ctx.strokeRect(15, 15, w - 30, h - 30);
 
-      // Window Anchor (left wall)
       const winX = w * 0.18;
       const winY = h * 0.38;
-      // Purifier Anchor (right floor unit)
+
       const purX = w * 0.88;
       const purY = h * 0.74;
 
@@ -1738,7 +1680,6 @@ const App = {
       const isPurifierOn = purDev && (purDev.state === 'Active' || purDev.state === 'High');
       const isHighPurifier = purDev && purDev.state === 'High';
 
-      // Animate Airflow Streamlines
       const speedMultiplier = (isHighPurifier ? 1.5 : 1.0) * (this.simSpeed || 1.0);
       this.particles.forEach(p => {
         p.progress += p.speed * speedMultiplier;
@@ -1747,48 +1688,46 @@ const App = {
           p.seed = Math.random();
         }
 
-        // Particle stream behavior
         let x, y, alpha, color;
 
         if (p.type === 'window') {
           if (!isWindowOpen) {
-            // Window closed: particle stays dormant or near window frame
+
             x = winX + (Math.sin(p.progress * Math.PI * 2) * 8);
             y = winY + (p.seed - 0.5) * 40;
             alpha = 0.08;
             color = 'rgba(200, 200, 200, ';
           } else {
-            // Window Open: Fresh air curves across room towards floor / bed
+
             const t = p.progress;
             x = winX + t * (w * 0.55);
             y = winY + Math.sin(t * Math.PI) * 50 + (p.seed - 0.5) * 35;
             alpha = Math.sin(t * Math.PI) * 0.75;
-            
-            // Outdoor AQI color coding
+
             if (outdoorAQI > 100) {
-              color = 'rgba(217, 119, 6, '; // Amber warning
+              color = 'rgba(217, 119, 6, '; 
             } else {
-              color = 'rgba(16, 185, 129, '; // Crisp emerald green
+              color = 'rgba(16, 185, 129, '; 
             }
           }
         } else if (p.type === 'purifier') {
-          // Air circulation into and out of purifier unit
+
           const t = p.progress;
           if (isPurifierOn) {
             if (t < 0.45) {
-              // Room air drawing towards purifier base
+
               const s = t / 0.45;
               x = w * 0.65 + s * (purX - w * 0.65) + Math.cos(s * Math.PI) * 15;
               y = h * 0.82 + (s * (purY - h * 0.82));
               alpha = s * 0.6;
-              color = 'rgba(147, 197, 253, '; // Soft ambient blue
+              color = 'rgba(147, 197, 253, '; 
             } else {
-              // Pure cleaned air jet rising from top of purifier
+
               const s = (t - 0.45) / 0.55;
               x = purX + Math.sin(s * Math.PI * 2) * 14 - (s * 30);
               y = (purY - 20) - s * (h * 0.45);
               alpha = (1 - s) * 0.85;
-              color = 'rgba(52, 211, 153, '; // Luminous pristine green
+              color = 'rgba(52, 211, 153, '; 
             }
           } else {
             x = purX;
@@ -1797,7 +1736,7 @@ const App = {
             color = 'rgba(156, 163, 175, ';
           }
         } else {
-          // Ambient room drift / ventilation
+
           const t = p.progress;
           x = (w * 0.3) + t * (w * 0.45) + (Math.sin(t * 4) * 20);
           y = (h * 0.2) + t * (h * 0.5) + (p.seed * 30);
@@ -1805,13 +1744,11 @@ const App = {
           color = 'rgba(96, 165, 250, ';
         }
 
-        // Render particle head and trail
         ctx.beginPath();
         ctx.arc(x, y, p.size, 0, Math.PI * 2);
         ctx.fillStyle = `${color}${alpha})`;
         ctx.fill();
 
-        // Subtle glow halo
         ctx.beginPath();
         ctx.arc(x, y, p.size * 2.2, 0, Math.PI * 2);
         ctx.fillStyle = `${color}${alpha * 0.3})`;
@@ -1842,9 +1779,6 @@ const App = {
     }
   },
 
-  // -------------------------------------------------------------
-  // Modals & Confirmations
-  // -------------------------------------------------------------
   openStandardsModal() {
     const container = document.getElementById('modal-container');
     if (!container) return;
@@ -1903,7 +1837,6 @@ const App = {
       });
     }
 
-    // Step switching function
     const goToStep = (stepNumber) => {
       if (stepNumber < 1 || stepNumber > 4) return;
       if (stepNumber > currentStep + 1) return;
@@ -1919,7 +1852,6 @@ const App = {
       }
       currentStep = stepNumber;
 
-      // Update stepper tabs
       document.querySelectorAll('.modal-step-tab').forEach(tab => {
         const step = parseInt(tab.dataset.step, 10);
         const pill = tab.querySelector('.step-num-pill');
@@ -1935,7 +1867,6 @@ const App = {
         }
       });
 
-      // Update Header Title & Subtitle
       const titleEl = document.getElementById('space-modal-title');
       const subtitleEl = document.getElementById('space-modal-subtitle');
       const baseAction = roomToEdit ? 'Edit space' : 'Add a space';
@@ -1949,7 +1880,6 @@ const App = {
         else if (currentStep === 4) subtitleEl.textContent = 'Review space specifications and environmental compliance before saving.';
       }
 
-      // Toggle Step Panes
       for (let i = 1; i <= 4; i++) {
         const pane = document.getElementById(`space-step-pane-${i}`);
         if (pane) {
@@ -1957,12 +1887,10 @@ const App = {
         }
       }
 
-      // Calculations for Step 2
       if (currentStep === 2) {
         updateDimensionsPreview();
       }
 
-      // Live Review Population for Step 4
       if (currentStep === 4) {
         populateReviewStep();
       }
@@ -2008,7 +1936,6 @@ const App = {
       if (revAshrae) revAshrae.textContent = `~${ashraeTarget} m³/h`;
     };
 
-    // Attach click events to Stepper Tabs (Room details, Devices, Review)
     document.querySelectorAll('.modal-step-tab').forEach(tab => {
       tab.addEventListener('click', (e) => {
         e.preventDefault();
@@ -2017,7 +1944,6 @@ const App = {
       });
     });
 
-    // Attach Next & Back buttons
     const next1 = document.getElementById('btn-step-next-1');
     if (next1) next1.addEventListener('click', () => goToStep(2));
 
@@ -2034,7 +1960,6 @@ const App = {
     const prev4 = document.getElementById('btn-step-prev-4');
     if (prev4) prev4.addEventListener('click', () => goToStep(3));
 
-    // Live update calculations on dimension input change
     ['room-input-length', 'room-input-width', 'room-input-height'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.addEventListener('input', updateDimensionsPreview);
@@ -2156,9 +2081,6 @@ const App = {
     }
   },
 
-  // -------------------------------------------------------------
-  // Google Identity Services SDK Initialization
-  // -------------------------------------------------------------
   initGoogleAuthSDK() {
     const clientId = API.getGoogleClientId();
     if (!clientId) return false;
@@ -2211,9 +2133,6 @@ const App = {
     }
   },
 
-  // -------------------------------------------------------------
-  // Authentication & Onboarding Forms
-  // -------------------------------------------------------------
   attachAuthEvents() {
     const formSignIn = document.getElementById('form-sign-in');
     const formSignUp = document.getElementById('form-sign-up');
@@ -2225,7 +2144,6 @@ const App = {
     const formConfirmReset = document.getElementById('form-confirm-password-reset');
     const resetStatus = document.getElementById('password-reset-status');
 
-    // Initialize Google Identity Services if client ID is set
     this.initGoogleAuthSDK();
 
     if (btnGotoSignUp) {
@@ -2267,7 +2185,6 @@ const App = {
     const btnDemo2 = document.getElementById('btn-explore-demo-signup');
     if (btnDemo2) btnDemo2.addEventListener('click', startDemoMode);
 
-    // Toggle password visibility (Supports SVG eye/eyeOff state icon swap)
     document.querySelectorAll('.btn-toggle-pw').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.preventDefault();
@@ -2284,7 +2201,6 @@ const App = {
       });
     });
 
-    // Helper: Open 2-Minute Google Setup Walkthrough Modal
     const openGoogleSetupModal = () => {
       let modalWrapper = document.getElementById('google-modal-container');
       if (!modalWrapper) {
@@ -2307,7 +2223,6 @@ const App = {
         });
       }
 
-      // Copy origin buttons
       document.querySelectorAll('.btn-copy-origin').forEach(copyBtn => {
         copyBtn.addEventListener('click', (e) => {
           const textToCopy = e.target.getAttribute('data-copy');
@@ -2321,7 +2236,6 @@ const App = {
         });
       });
 
-      // Save & Connect GSI button
       const btnSaveGsi = document.getElementById('btn-save-and-connect-gsi');
       if (btnSaveGsi) {
         btnSaveGsi.addEventListener('click', () => {
@@ -2351,7 +2265,6 @@ const App = {
         });
       }
 
-      // Instant personal account test bypass link
       const btnDemoBypass = document.getElementById('btn-demo-google-bypass');
       if (btnDemoBypass) {
         btnDemoBypass.addEventListener('click', () => {
@@ -2361,7 +2274,6 @@ const App = {
       }
     };
 
-    // Keep the existing entry point, but do not fabricate a Google-authenticated user.
     const openSimulatedGooglePicker = () => {
       let modalWrapper = document.getElementById('google-modal-container');
       if (!modalWrapper) {
@@ -2386,14 +2298,13 @@ const App = {
       }
     };
 
-    // Google Sign-In & Sign-Up Buttons
     const handleGoogleAuthAction = () => {
       const clientId = API.getGoogleClientId();
       if (clientId && window.google?.accounts?.id) {
         try {
           window.google.accounts.id.prompt((notification) => {
             if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-              // If browser blocked One Tap or dismissed, open the guide or account modal
+
               openSimulatedGooglePicker();
             }
           });
@@ -2411,7 +2322,6 @@ const App = {
     const btnGoogleSignUp = document.getElementById('btn-google-signup');
     if (btnGoogleSignUp) btnGoogleSignUp.addEventListener('click', handleGoogleAuthAction);
 
-    // Setup guide trigger buttons
     const btnOpenGoogleSetup = document.getElementById('btn-open-google-setup');
     if (btnOpenGoogleSetup) btnOpenGoogleSetup.addEventListener('click', openGoogleSetupModal);
 
@@ -2433,7 +2343,7 @@ const App = {
         try {
           const user = await API.login(email, password, remember);
           this.setAuthenticatedUser(user);
-          // Direct straight to dashboard with animated data loading
+
           State.activeView = 'dashboard';
           window.location.hash = 'dashboard';
           this.showDashboardEntranceAnimation = true;
@@ -2627,7 +2537,6 @@ const App = {
 
     viewDashboard.classList.add('dashboard-loading-anim');
 
-    // Prepend sleek telemetry sync banner
     const existingBanner = document.getElementById('dash-telemetry-banner');
     if (existingBanner) existingBanner.remove();
 
@@ -2914,7 +2823,6 @@ const App = {
   }
 };
 
-// Bootstrap application on DOM ready
 document.addEventListener('DOMContentLoaded', () => {
   App.init();
 });

@@ -1,4 +1,3 @@
-/* Breathe Clean - API Client Abstraction Layer */
 
 const STORAGE_KEYS = {
   USER: 'breatheclean_user',
@@ -269,7 +268,6 @@ const API = {
     }
   },
 
-  // Simulates network latency if desired
   async _delay(ms = 40) {
     return new Promise(resolve => setTimeout(resolve, ms));
   },
@@ -741,8 +739,7 @@ const API = {
     try {
       await this._authRequest('logout', {});
     } catch (error) {
-      // Backend may be offline, demo session active, or session already expired.
-      // Client-side logout must always succeed and clear credentials cleanly.
+
       console.warn('Backend logout warning:', error?.message || error);
     } finally {
       if (userId) this._clearScopedData(userId);
@@ -769,7 +766,6 @@ const API = {
     return updated;
   },
 
-  // Rooms Endpoints
   getDefaultRooms() {
     return JSON.parse(JSON.stringify(DEFAULT_ROOMS));
   },
@@ -915,7 +911,6 @@ const API = {
     return copy;
   },
 
-  // Active Room ID
   getActiveRoomId() {
     const id = this._getScopedItem(STORAGE_KEYS.ACTIVE_ROOM_ID);
     const rooms = this.getRooms();
@@ -929,7 +924,6 @@ const API = {
     this._setScopedItem(STORAGE_KEYS.ACTIVE_ROOM_ID, id);
   },
 
-  // Mode & Device Commands
   async setRoomMode(roomId, mode) {
     if (!['AUTO', 'MANUAL'].includes(mode)) {
       throw new Error('Choose Auto or Manual mode.');
@@ -1006,7 +1000,6 @@ const API = {
     return event;
   },
 
-  // Settings
   getSettings() {
     const userId = this._userId();
     return userId ? this.getSettingsForUser(userId) : {

@@ -1,4 +1,4 @@
-// These project cutoffs retain the prior safety validator's values; they are not medical guarantees.
+
 const thresholds = Object.freeze({
   outdoorAQI: 150,
   co2: 1000

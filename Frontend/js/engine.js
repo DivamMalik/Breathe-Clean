@@ -1,4 +1,3 @@
-/* Breathe Clean - Centralized Autonomous Decision Engine */
 
 const Engine = {
   decide(environment, room, devices = []) {
@@ -18,7 +17,6 @@ const Engine = {
     let expectedOutcome = '';
     let statusLevel = 'good';
 
-    // Rule 1: Hazardous outdoor pollution shield (Outdoor AQI > 150)
     if (outdoorAQI > 150) {
       targetWindow = 'Closed';
       targetVentilation = 'Filtered';
@@ -29,7 +27,7 @@ const Engine = {
       action = `Smart windows sealed. Ventilation in sealed filtered mode. Air purifier boosted to High CADR speed.`;
       expectedOutcome = `Protect occupants by scrubbing indoor air while completely blocking external toxic particulates.`;
     }
-    // Rule 2: Elevated outdoor pollution barrier (Outdoor AQI between 101 and 150)
+
     else if (outdoorAQI >= 101) {
       targetWindow = 'Closed';
       targetVentilation = (co2 > 1000) ? 'Filtered' : 'Normal';
@@ -40,7 +38,7 @@ const Engine = {
       action = `Purifier is running at ${targetPurifier === 'High' ? 'high' : 'normal'} mode. Ventilation is running at ${targetVentilation.toLowerCase()} rate.`;
       expectedOutcome = `Maintain cleaner indoor air while avoiding outdoor pollutants.`;
     }
-    // Rule 3: Indoor CO2 Spike with clean outdoor air (Outdoor AQI <= 65, CO2 > 950)
+
     else if (outdoorAQI <= 65 && co2 > 950) {
       targetWindow = 'Open';
       targetVentilation = 'High';
@@ -51,7 +49,7 @@ const Engine = {
       action = `Smart windows opened for natural airflow. Ventilation set to High. Purifier switched to Standby to conserve energy.`;
       expectedOutcome = `Displace stuffy indoor CO₂ with fresh oxygenated outdoor air rapidly.`;
     }
-    // Rule 4: High Indoor Particulates with Moderate Outdoor (Indoor AQI >= 90)
+
     else if (indoorAQI >= 90) {
       targetWindow = (outdoorAQI < 45) ? 'Open' : 'Closed';
       targetVentilation = 'Filtered';
@@ -62,7 +60,7 @@ const Engine = {
       action = `Air purifier ramped to High speed. Ventilation operating with continuous filtration.`;
       expectedOutcome = `Extract indoor VOCs and particulates to restore healthy baseline within 12 minutes.`;
     }
-    // Rule 5: Pure Clean Equilibrium (Both indoor and outdoor AQI <= 50, CO2 <= 800)
+
     else if (outdoorAQI <= 50 && indoorAQI <= 45 && co2 <= 800) {
       targetWindow = (temp >= 19 && temp <= 27) ? 'Open' : 'Closed';
       targetVentilation = 'Low';
@@ -73,7 +71,7 @@ const Engine = {
       action = `Smart windows ${targetWindow.toLowerCase()}. Air purifier running at whisper-quiet baseline. Ventilation at eco low.`;
       expectedOutcome = `Preserve fresh indoor environment while minimizing device power consumption.`;
     }
-    // Default Rule: Standard balanced automation
+
     else {
       targetWindow = (outdoorAQI < 60 && co2 > 800) ? 'Open' : 'Closed';
       targetVentilation = 'Normal';

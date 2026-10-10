@@ -1,4 +1,3 @@
-/* Breathe Clean - Central Application State Management */
 
 const State = {
   user: null,
@@ -105,7 +104,6 @@ const State = {
     if (room.mode === 'AUTO') {
       let changed = false;
 
-      // Smart Windows
       const winDev = room.devices.find(d => d.type === 'window');
       if (winDev && winDev.state !== decision.window) {
         const prev = winDev.state;
@@ -117,7 +115,6 @@ const State = {
         }
       }
 
-      // Ventilation
       const ventDev = room.devices.find(d => d.type === 'ventilation');
       if (ventDev && ventDev.state !== decision.ventilation) {
         const prev = ventDev.state;
@@ -129,7 +126,6 @@ const State = {
         }
       }
 
-      // Air Purifier
       const purDev = room.devices.find(d => d.type === 'purifier');
       if (purDev && purDev.state !== decision.purifier) {
         const prev = purDev.state;
@@ -208,7 +204,7 @@ const State = {
         API.saveRooms(this.rooms);
       }
     } else {
-      // In manual mode, still persist the latest evaluated decision metadata
+
       API.saveRooms(this.rooms);
     }
 
@@ -402,7 +398,6 @@ const State = {
     room.environment = { ...room.environment, ...updates, timestamp: new Date().toISOString() };
     await API.updateEnvironment(roomId, updates);
 
-    // Re-evaluate if active room
     if (roomId === this.activeRoomId) {
       this.evaluateActiveRoom(true);
     }
