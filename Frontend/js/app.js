@@ -1503,6 +1503,7 @@ const App = {
     const readings = (analytics?.readings || [])
       .filter(reading =>
         reading.metric === metric &&
+        reading.source !== 'unverified' &&
         Number.isFinite(reading.value) &&
         Number.isFinite(Date.parse(reading.recordedAt)) &&
         Date.parse(reading.recordedAt) >= now - rangeMs &&
