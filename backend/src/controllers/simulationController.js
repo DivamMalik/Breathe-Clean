@@ -62,7 +62,10 @@ function runSimulation(request, response) {
   }
 
   if (request.user) {
-    saveUserEnvironmentState(request.user.id, { sensorData });
+    saveUserEnvironmentState(request.user.id, {
+      sensorData,
+      sensorSource: "simulation"
+    });
     return response.json({
       success: true,
       sensorData,
@@ -83,7 +86,8 @@ function runSimulation(request, response) {
   return response.json({
     success: true,
     sensorData: sensorResult.data,
-    decision: generateDecision(sensorResult.data)
+    decision: generateDecision(sensorResult.data),
+    simulated: true
   });
 }
 

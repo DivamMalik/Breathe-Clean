@@ -140,7 +140,7 @@ test("assistant air-quality context uses only this account's saved location and 
       longitude: 77.5946,
       aqi: 47,
       category: "Good",
-      source: "Configured provider",
+      source: "Google Maps Platform Air Quality API (Universal AQI)",
       lastUpdated: "2026-10-09T10:00:00.000Z"
     }
   };
@@ -159,7 +159,7 @@ test("assistant air-quality context uses only this account's saved location and 
   const context = vm.createContext({
     localStorage,
     API: {
-      getCurrentUser: () => ({ id: 9 }),
+      getCurrentUser: () => ({ id: currentUserId }),
       getCachedAccountSetup: () => setup
     },
     Utils: {
@@ -172,17 +172,198 @@ test("assistant air-quality context uses only this account's saved location and 
   });
   vm.runInContext(chatbotSource, context);
   const chatbot = vm.runInContext("Chatbot", context);
+  let currentUserId = 9;
   chatbot.setAccount(9);
 
   const reply = await chatbot.interpretAndExecute("air quality status");
 
-  assert.match(reply.text, /Outdoor sensor AQI:\*\* 52/);
-  assert.match(reply.text, /Latest saved outdoor AQI provider reading:\*\* 47 \(Good\)/);
+  assert.match(reply.text, /is \*\*47\*\* \(Good\)/);
   assert.match(reply.text, /Bengaluru, Karnataka, India/);
+  assert.doesNotMatch(reply.text, /52|Indoor AQI:\*\* 35|CO₂:\*\* 600/);
 
+  currentUserId = 10;
+  const otherAccountReply = await chatbot.interpretAndExecute("outdoor AQI");
+  assert.match(otherAccountReply.text, /No verified provider AQI is saved/);
+  assert.doesNotMatch(otherAccountReply.text, /47|Bengaluru/);
+
+  currentUserId = 9;
   setup.outdoorAirQuality.latitude = 28.6139;
   const withoutMatchingLocation = chatbot.getSavedOutdoorAirQuality();
   assert.equal(withoutMatchingLocation, null);
+});
+
+test("assistant greets naturally and reports AQI questions from the saved provider only", async () => {
+  const setup = {
+    location: null,
+    outdoorAirQuality: null
+  };
+  const context = vm.createContext({
+    localStorage: createStorage(),
+    API: {
+      getCurrentUser: () => ({ id: 21 }),
+      getCachedAccountSetup: () => setup
+    },
+    Utils: { generateId: prefix => `${prefix}-test` },
+    State: { getActiveRoom: () => null, rooms: [] },
+    window: { location: { hash: "" } }
+  });
+  vm.runInContext(chatbotSource, context);
+  const chatbot = vm.runInContext("Chatbot", context);
+  chatbot.setAccount(21);
+
+  const greeting = await chatbot.interpretAndExecute("hello");
+  assert.match(greeting.text, /Hello!/);
+  assert.doesNotMatch(greeting.text, /unsupported action|couldn't match/i);
+
+  const unavailable = await chatbot.interpretAndExecute("what is the AQI?");
+  assert.match(unavailable.text, /No verified provider AQI is saved/);
+  assert.match(unavailable.text, /manual latitude\/longitude/i);
+  assert.doesNotMatch(unavailable.text, /simulated|demo AQI/i);
+});
+
+test("assistant explains a decision before considering window-control commands", async () => {
+  const room = {
+    id: "room-1",
+    name: "Office",
+    devices: [{ id: "window-1", type: "window" }],
+    environment: {
+      indoorAQI: 35,
+      outdoorAQI: 52,
+      co2: 600,
+      temperature: 24,
+      humidity: 50,
+      occupancy: 1
+    },
+    decision: {
+      title: "Windows remain closed",
+      reason: "Outdoor AQI exceeds the configured threshold",
+      action: "Keep windows closed",
+      expectedOutcome: "Reduce exposure"
+    }
+  };
+  let controlCalls = 0;
+  const context = vm.createContext({
+    localStorage: createStorage(),
+    API: {
+      getCurrentUser: () => ({ id: 11 }),
+      getCachedAccountSetup: () => null
+    },
+    Utils: { generateId: prefix => `${prefix}-test` },
+    State: {
+      getActiveRoom: () => room,
+      rooms: [room],
+      async setDeviceStateManual() {
+        controlCalls += 1;
+        throw new Error("A why-question must not submit a control");
+      }
+    },
+    window: { location: { hash: "" } }
+  });
+  vm.runInContext(chatbotSource, context);
+  const chatbot = vm.runInContext("Chatbot", context);
+  chatbot.setAccount(11);
+
+  const reply = await chatbot.interpretAndExecute("Why did you open the windows?");
+
+  assert.match(reply.text, /System Decision Explanation/);
+  assert.match(reply.text, /Outdoor AQI exceeds the configured threshold/);
+  assert.equal(controlCalls, 0);
+});
+
+test("assistant does not change a device state for an informational device question", async () => {
+  const room = {
+    id: "room-1",
+    name: "Office",
+    devices: [{ id: "purifier-1", type: "purifier" }],
+    environment: {}
+  };
+  let controlCalls = 0;
+  const context = vm.createContext({
+    localStorage: createStorage(),
+    API: {
+      getCurrentUser: () => ({ id: 12 }),
+      getCachedAccountSetup: () => null
+    },
+    Utils: { generateId: prefix => `${prefix}-test` },
+    State: {
+      getActiveRoom: () => room,
+      rooms: [room],
+      async setDeviceStateManual() {
+        controlCalls += 1;
+        return { success: true, deviceState: { purifier: "ON" } };
+      }
+    },
+    window: { location: { hash: "" } }
+  });
+  vm.runInContext(chatbotSource, context);
+  const chatbot = vm.runInContext("Chatbot", context);
+  chatbot.setAccount(12);
+
+  const reply = await chatbot.interpretAndExecute("What is the purifier status?");
+
+  assert.equal(controlCalls, 0);
+  assert.match(reply.text, /did not change any device state/i);
+  assert.doesNotMatch(reply.text, /confirmed|is on/i);
+});
+
+test("assistant describes its deterministic implementation and avoids invented AQI thresholds", async () => {
+  const context = vm.createContext({
+    localStorage: createStorage(),
+    API: {
+      getCurrentUser: () => ({ id: 13 }),
+      getCachedAccountSetup: () => null
+    },
+    Utils: { generateId: prefix => `${prefix}-test` },
+    State: { getActiveRoom: () => null, rooms: [] },
+    window: { location: { hash: "" } }
+  });
+  vm.runInContext(chatbotSource, context);
+  const chatbot = vm.runInContext("Chatbot", context);
+  chatbot.setAccount(13);
+
+  assert.match(chatbot.messages[0].text, /rule-based intent handling/i);
+  assert.match(chatbot.messages[0].text, /no LLM, Ollama, or n8n service is connected/i);
+  const reply = await chatbot.interpretAndExecute("What do AQI categories mean?");
+  assert.match(reply.text, /thresholds differ by provider and region/i);
+  assert.doesNotMatch(reply.text, /0–50|51–100|101–150|hazardous/i);
+});
+
+test("assistant labels canned demo telemetry as simulated rather than live sensor data", async () => {
+  const room = {
+    name: "Demo Office",
+    mode: "AUTO",
+    environment: {
+      indoorAQI: 35,
+      outdoorAQI: 52,
+      co2: 600,
+      temperature: 24,
+      humidity: 50,
+      occupancy: 1
+    }
+  };
+  const context = vm.createContext({
+    localStorage: createStorage(),
+    API: {
+      getCurrentUser: () => ({ id: "usr_divam_01" }),
+      getCachedAccountSetup: () => null
+    },
+    Utils: {
+      generateId: prefix => `${prefix}-test`,
+      getAqiStatus: value => ({ label: value < 50 ? "Good" : "Moderate" }),
+      getCo2Status: () => ({ label: "Normal" })
+    },
+    State: { getActiveRoom: () => room, rooms: [room] },
+    window: { location: { hash: "" } }
+  });
+  vm.runInContext(chatbotSource, context);
+  const chatbot = vm.runInContext("Chatbot", context);
+  chatbot.setAccount("usr_divam_01");
+
+  const reply = await chatbot.interpretAndExecute("air quality status");
+
+  assert.match(reply.text, /Simulated demo telemetry for Demo Office/);
+  assert.match(reply.text, /Simulated demo outdoor AQI:\*\* 52/);
+  assert.doesNotMatch(reply.text, /Outdoor sensor AQI:\*\*/);
 });
 
 test("assistant workspace and floating chat retain their composer and message containers", () => {
@@ -215,6 +396,7 @@ test("assistant workspace and floating chat retain their composer and message co
   assert.match(workspace, /id="assistant-composer-form"/);
   assert.match(workspace, /id="assistant-chat-container"/);
   assert.match(workspace, /id="assistant-prompt-input"/);
+  assert.match(workspace, /Rule-based assistant; no LLM, Ollama, or n8n service is connected/);
   assert.match(workspace, /Ready/);
   assert.match(workspace, /The backend is unavailable/);
   assert.match(workspace, /chat-action-badge action-failed/);

@@ -8,7 +8,8 @@ const SETUP_FIELDS = new Set([
   "devices",
   "preferences",
   "location",
-  "outdoorAirQuality"
+  "outdoorAirQuality",
+  "controlMode"
 ]);
 
 function validateLocation(location) {
@@ -59,6 +60,7 @@ function validateSetup(setup, { allowLegacyMissingLocation = false } = {}) {
       typeof room.name !== "string" ||
       !room.name.trim() ||
       room.name.length > 100 ||
+      (room.mode !== undefined && !["AUTO", "MANUAL"].includes(room.mode)) ||
       !Array.isArray(room.devices) ||
       room.devices.some((device) => !device || !ROOM_DEVICE_TYPES.has(device.type))
     ) {
@@ -73,6 +75,12 @@ function validateSetup(setup, { allowLegacyMissingLocation = false } = {}) {
     DEVICE_TYPES.some((device) => typeof setup.devices[device] !== "boolean")
   ) {
     return "devices must contain boolean window, ventilation, and purifier selections";
+  }
+  if (
+    setup.controlMode !== undefined &&
+    !["AUTO", "MANUAL"].includes(setup.controlMode)
+  ) {
+    return "controlMode must be AUTO or MANUAL";
   }
   if (
     setup.preferences !== null &&

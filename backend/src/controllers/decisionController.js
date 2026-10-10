@@ -9,6 +9,7 @@ const {
 const { saveAppliedDecision } = require("../data/database");
 const { generateDecision } = require("../services/decisionEngine");
 const { validateDecision } = require("../services/safetyValidator");
+const { getAccountControlMode } = require("../services/accountMode");
 const {
   getUserEnvironmentState,
   saveUserEnvironmentState
@@ -54,6 +55,16 @@ function applyDecision(request, response) {
       success: false,
       applied: false,
       error: "Configure sensor readings before applying a decision"
+    });
+  }
+  if (
+    request.user &&
+    getAccountControlMode(request.user.id, sensorData.room) === "MANUAL"
+  ) {
+    return response.status(409).json({
+      success: false,
+      applied: false,
+      error: "Manual mode is enabled; automatic decisions are not applied"
     });
   }
   const validation = validateDecision(decision, sensorData);
