@@ -1,0 +1,25 @@
+{
+  "name": "breathe-clean",
+  "version": "1.0.0",
+  "description": "Autonomous Indoor Air Quality & Intelligent Ventilation Platform",
+  "scripts": {
+    "postinstall": "npm --prefix backend install",
+    "install:backend": "npm --prefix backend install",
+    "start": "npm --prefix backend start",
+    "dev": "npm --prefix backend run dev",
+    "test": "node --test Frontend/test/*.test.js && npm --prefix backend test",
+    "test:frontend": "node --test Frontend/test/*.test.js",
+    "test:backend": "npm --prefix backend test"
+  },
+  "keywords": [
+    "air-quality",
+    "ventilation",
+    "indoor-air-quality",
+    "automation",
+    "ashrae",
+    "iot",
+    "smart-home"
+  ],
+  "author": "Divam Malik",
+  "license": "MIT"
+}

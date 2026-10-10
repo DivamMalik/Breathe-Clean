@@ -41,8 +41,20 @@ app.use("/api/simulation", simulationRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/account", accountRoutes);
 
-app.use((_request, response) => {
+const path = require("path");
+const frontendPath = path.join(__dirname, "../../Frontend");
+app.use(express.static(frontendPath));
+
+app.use("/api", (_request, response) => {
   response.status(404).json({ success: false, error: "Route not found" });
+});
+
+app.use((_request, response) => {
+  response.sendFile(path.join(frontendPath, "index.html"), (err) => {
+    if (err) {
+      response.status(404).json({ success: false, error: "Route not found" });
+    }
+  });
 });
 
 app.use((error, _request, response, _next) => {
