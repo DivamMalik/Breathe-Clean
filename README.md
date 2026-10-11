@@ -1,211 +1,178 @@
 # 🍃 Breathe Clean
 ### *Autonomous Indoor Air Quality & Intelligent Ventilation Platform*
 
-[![JavaScript](https://img.shields.io/badge/JavaScript-ES6+-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black)](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
-[![Node.js](https://img.shields.io/badge/Node.js-v18+-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org)
-[![Express](https://img.shields.io/badge/Express-5.x-000000?style=for-the-badge&logo=express&logoColor=white)](https://expressjs.com)
-[![SQLite](https://img.shields.io/badge/SQLite-WAL_Mode-003B57?style=for-the-badge&logo=sqlite&logoColor=white)](https://www.sqlite.org)
-[![Google Maps Air Quality](https://img.shields.io/badge/Google_Maps-Air_Quality_API-4285F4?style=for-the-badge&logo=google-maps&logoColor=white)](https://developers.google.com/maps/documentation/air-quality)
-[![Tests Passing](https://img.shields.io/badge/Tests-95%20Passing-success?style=for-the-badge)](https://nodejs.org/api/test.html)
 [![AWS EC2](https://img.shields.io/badge/AWS-Amazon_EC2-FF9900?style=for-the-badge&logo=amazon-aws&logoColor=white)](http://ec2-35-154-243-219.ap-south-1.compute.amazonaws.com)
 [![AWS DynamoDB](https://img.shields.io/badge/AWS-Amazon_DynamoDB-4053D6?style=for-the-badge&logo=amazon-dynamodb&logoColor=white)](http://ec2-35-154-243-219.ap-south-1.compute.amazonaws.com)
+[![Node.js](https://img.shields.io/badge/Node.js-v22_LTS-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org)
+[![Express](https://img.shields.io/badge/Express-5.x-000000?style=for-the-badge&logo=express&logoColor=white)](https://expressjs.com)
+[![SQLite](https://img.shields.io/badge/SQLite-WAL_Mode-003B57?style=for-the-badge&logo=sqlite&logoColor=white)](https://www.sqlite.org)
+[![Tests Passing](https://img.shields.io/badge/Tests-95%20Passing-success?style=for-the-badge)](https://nodejs.org/api/test.html)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
 
 > 🚀 **Live AWS Deployment:** [http://ec2-35-154-243-219.ap-south-1.compute.amazonaws.com](http://ec2-35-154-243-219.ap-south-1.compute.amazonaws.com)  
-> 🌐 **Direct Server IP:** [http://35.154.243.219](http://35.154.243.219)
-
-## 🏆 Project Overview
-
-**Breathe Clean** is an autonomous indoor environmental orchestration platform built for smart campuses, commercial facilities, and modern homes. It intelligently bridges architectural aerodynamics with smart hardware automation:
-
-1. **Natural Ventilation First**: When outdoor air is crisp and clean, motorized window actuators open automatically for natural fresh air circulation.
-2. **Eco Standby Energy Conservation**: When indoor and outdoor air quality are healthy, air purifiers automatically power down to eliminate redundant electrical draw.
-3. **Pollution Shield**: During outdoor smog spikes or hazardous particulate events, windows instantly seal, HVAC switches to safe indoor recirculation, and purifiers ramp up to Turbo CADR.
-4. **Deterministic & Explainable AI**: Every automated action is governed by deterministic ASHRAE 62.1-aligned environmental rules with zero hallucinated decisions.
-5. **Session-Authenticated Multi-Account Security**: Built-in SQLite-backed session store with scrypt password hashing and user-isolated device and sensor configurations.
+> 🌐 **Direct Public IP:** [http://35.154.243.219](http://35.154.243.219)  
+> 🏆 **Built for:** WeMakeDevs × AWS Environmental Hacks — **Track 01: Air**
 
 ---
 
-## 📸 System Showcase
+## 💡 The Problem: The Indoor Air Quality Paradox
 
-| Master Facility Actuation Console | Smart Hardware Pairing (Setup Mode) |
+In major cities and across North India, winter air quality regularly spikes past hazardous levels (AQI 350–500+). Most people spend over 90% of their daily lives indoors, where they face a difficult paradox:
+
+1. **Keep windows shut**: Carbon dioxide (CO₂) builds up rapidly past 1,000 ppm, causing fatigue, headaches, poor concentration, and respiratory distress.
+2. **Open windows blindly**: Hazardous outdoor PM2.5 and toxic particulate smog flood indoors.
+3. **Leave air purifiers on 24/7**: Purifiers consume substantial electricity continuously, even on days when the outdoor air is clean and free natural ventilation would be healthier and cheaper.
+
+---
+
+## 🍃 The Solution: What Breathe Clean Does
+
+**Breathe Clean** is an autonomous indoor environmental orchestration platform. It connects real-time outdoor atmospheric telemetry with indoor sensor streams to intelligently control smart windows, HVAC ventilation, and HEPA air purifiers based on **ASHRAE 62.1 indoor ventilation standards**:
+
+* 🪟 **Natural Ventilation First**: When outdoor air is clean and crisp, motorized windows open automatically to flush out stale air without spending a single watt on purifiers.
+* ⚡ **Eco-Standby Energy Saver**: When both indoor and outdoor air quality are within safe limits, purifiers shut down automatically to prevent wasted electricity.
+* 🛡️ **Pollution Shield**: The moment an outdoor smog spike occurs (AQI > 120), windows seal immediately, HVAC switches to safe indoor recirculation, and purifiers ramp up to maximum CADR.
+* 💨 **Visual Airflow Particle Canvas**: An in-browser 2D fluid dynamics particle engine visualizes exactly how air moves across your rooms in real time (fresh window air, HVAC flow, and HEPA filtered streams).
+* 🤖 **Explainable Decisions**: A built-in environmental assistant explains every automated decision with clear data rather than black-box guesses.
+
+---
+
+## 📸 Interface Showcase
+
+| Master Actuation Console | Smart Hardware Pairing Wizard |
 |:---:|:---:|
 | ![Admin Controls](docs/screenshots/screenshot_admin_controls_upgraded.png) | ![Device Pairing](docs/screenshots/screenshot_step4_device_pairing.png) |
 
-| Privacy-Preserving Telemetry & Zone Actions | Real-Time CFD Room Airflow Simulation |
+| Live Telemetry & Environmental Status | Real-Time Room Airflow Simulation |
 |:---:|:---:|
 | ![Zone Telemetry](docs/screenshots/screenshot_admin_controls_table.png) | ![CFD Simulation](docs/screenshots/screenshot_library_room.png) |
 
 ---
 
-## ✨ Key Features & Architecture
+## ☁️ AWS Cloud Architecture
 
-### 1. 🛰️ Verified Environmental Telemetry (Google Maps Platform)
-* Integrates with **Google Maps Platform Air Quality API (Universal AQI)** for verified outdoor atmospheric telemetry (hourly history, AQI categorizations, and pollutant breakdowns).
-* Coordinates and Indian city lookups powered by **Google Maps Geocoding API**, with manual coordinate entry fallback and GPS auto-detection.
+Breathe Clean is architected and deployed on Amazon Web Services using the Free Tier:
 
-### 2. 💨 Dynamic CFD Streamline Particle Simulator
-* High-performance HTML5 Canvas 2D fluid dynamics particle engine rendering real-time indoor aerodynamics across rooms (Bedroom, Living Room, Study):
-  * 🟢 **Natural Fresh Air** (Green streamlines from motorized windows)
-  * 🔵 **Central HVAC Airflow** (Cyan streamlines from ceiling supply diffuser)
-  * 🟣 **HEPA Purified Stream** (Purple laminar flow from cylindrical floor unit)
-
-### 3. 🤖 Autonomous Explainable Rule Engine
-* Authoritative decision engine implementing ASHRAE 62.1 indoor ventilation guidelines:
-  * **Rule 1: High Outdoor Particulates Shield** (Seals windows when outdoor AQI exceeds 120).
-  * **Rule 2: Carbon Dioxide Alertness Flush** (Opens windows when indoor CO₂ exceeds 800 ppm, provided outdoor air is clean).
-  * **Rule 3: Eco Standby Power Saver** (Shuts purifier OFF when indoor AQI ≤ 50 and outdoor air is safe).
-  * **Rule 4: Bad Indoor Air Scrubbing** (Engages air purifier to Max when indoor AQI is degraded).
-
-### 4. 🚀 Guided 4-Step Setup Wizard
-* First-time onboarding gateway customized for occupants and facility managers:
-  * **Step 1**: Location & Climate profile (GPS or searchable Indian cities).
-  * **Step 2**: Space Profile (Rooms, square footage, window counts).
-  * **Step 3**: Health & Ventilation Preferences (Comfort thresholds, Eco standby).
-  * **Step 4**: Connected Device Pairing & Diagnostic ping.
-
----
-
-## 🏛️ System Architecture
-
-```mermaid
-graph TD
-    A[Google Maps Air Quality API] -->|Verified Outdoor AQI| B(Breathe Clean Express Backend)
-    C[Indoor Sensor Stream: CO2, Temp, PM2.5] -->|Real-time Telemetry| B
-    
-    subgraph Decision Engine
-        B --> D{AQI & CO2 Assessment}
-        D -->|Clean Air & Outdoor AQI < 80| E[Eco Standby: Purifier OFF, Windows Open]
-        D -->|Outdoor AQI > 120| F[Pollution Shield: Windows Sealed, Purifier Max]
-        D -->|Indoor CO2 > 800 ppm & Clean Outdoor| G[Fresh Air Flush: Windows Open]
-    end
-    
-    subgraph Device Modulation
-        E --> H[Motorized Window Relays]
-        E --> I[Smart HEPA Purifier]
-        F --> H
-        F --> I
-        G --> H
-    end
-    
-    subgraph Frontend SPA
-        B --> K[Live CFD Streamline Canvas]
-        B --> L[Verified AQI Analytics Chart]
-        B --> M[Autonomous Mode Toggle Auto/Manual]
-    end
+```
+┌─────────────────────────────────┐
+│       Incoming Users / Browser  │
+└────────────────┬────────────────┘
+                 │ HTTP (Port 80)
+                 ▼
+┌────────────────────────────────────────────────────────┐
+│  Amazon EC2 (Ubuntu 24.04 LTS — ap-south-1 Mumbai)     │
+│  ├─ Nginx Reverse Proxy (Port 80 → Port 5001)          │
+│  ├─ Node.js 22 LTS Runtime                             │
+│  ├─ PM2 Cluster Process Manager                        │
+│  ├─ Express 5 REST API + Static SPA Frontend           │
+│  └─ SQLite Local Store (WAL Mode, scrypt auth)         │
+└────────────────┬───────────────────────────────────────┘
+                 │ IAM Role (BreatheClean_EC2_Profile)
+                 ▼
+┌────────────────────────────────────────────────────────┐
+│  Amazon DynamoDB (BreatheClean_Telemetry)              │
+│  └─ Cloud telemetry storage for live sensor events     │
+└────────────────────────────────────────────────────────┘
 ```
 
----
-
-## 📂 Codebase Structure
-
-```text
-Breathe-Clean/
-├── .github/
-│   └── workflows/
-│       └── ci.yml               # Automated CI testing on Node 18 & 20
-├── docs/
-│   └── screenshots/             # Interface screenshots & UI walkthroughs
-├── Frontend/
-│   ├── assets/
-│   │   └── images/              # High-res room photography & backgrounds
-│   ├── css/
-│   │   └── styles.css           # Glassmorphic responsive design system
-│   ├── js/
-│   │   ├── api.js               # REST client, session state & telemetry bridge
-│   │   ├── app.js               # Main SPA controller, canvas & event hub
-│   │   ├── chatbot.js           # Explainable assistant for environmental decisions
-│   │   ├── engine.js            # Client-side rule verification mirror
-│   │   ├── state.js             # Reactive in-memory state store
-│   │   ├── utils.js             # Formatting, icons, and SVG chart utilities
-│   │   └── views.js             # View templates (Dashboard, Rooms, Analytics, Setup)
-│   ├── test/                    # 51 frontend unit and integration tests
-│   └── index.html               # Clean single-page application entry point
-├── backend/
-│   ├── src/
-│   │   ├── auth/                # Session store & scrypt password hashing
-│   │   ├── data/                # SQLite initialization and state restoration
-│   │   ├── routes/              # Auth, account, sensor, device & decision routes
-│   │   ├── rules/               # Deterministic ventilation decision engine
-│   │   ├── services/            # Google Maps AQI & Geocoding providers
-│   │   └── server.js            # Express server (API & static frontend hosting)
-│   ├── test/                    # 44 backend integration and rule tests
-│   ├── .env.example             # Template environment configuration
-│   └── package.json             # Backend dependencies and scripts
-├── package.json                 # Unified root scripts for install, dev, and test
-└── README.md
-```
+* **Amazon EC2 (`t3.micro`)**: Hosts the application 24/7 in Mumbai (`ap-south-1`) behind an Nginx reverse proxy and PM2 process supervisor.
+* **Amazon DynamoDB**: Stores live room telemetry streams and atmospheric observation events with sub-millisecond retrieval.
+* **AWS IAM**: Provides keyless, secure instance profile permissions between EC2 and DynamoDB without storing hardcoded credentials.
+* **Automated AWS Provisioning**: Includes a one-click AWS CLI script (`deploy/aws-provision-ec2.sh`) that provisions the VPC security group, key pair, and cloud-init bootstrap automatically.
 
 ---
 
-## 🚀 Quick Start & Local Setup
+## ⚙️ How the Autonomous Rule Engine Works
+
+Breathe Clean follows deterministic, safety-validated thresholds aligned with ASHRAE 62.1:
+
+| Condition | Outdoor Air | Indoor CO₂ / AQI | Autonomous Action |
+| :--- | :---: | :---: | :--- |
+| **Clean Air Day** | AQI ≤ 80 | Normal (< 800 ppm) | **Natural Ventilation**: Windows open, air purifier in Eco Standby (OFF). |
+| **Outdoor Smog Spike** | AQI > 120 | Any | **Pollution Shield**: Windows instantly closed, purifier engaged at High. |
+| **High Indoor CO₂** | AQI ≤ 100 | CO₂ > 800 ppm | **Fresh Air Flush**: Windows open to lower CO₂ safely. |
+| **Stale Air (Outdoor Smog)** | AQI > 120 | CO₂ > 800 ppm | **Filtered Air Recirculation**: Windows stay closed; HVAC filtered intake active. |
+
+---
+
+## 🚀 Getting Started Locally
 
 ### Prerequisites
-* **Node.js**: v18.0.0 or higher
-* **npm**: v9.0.0 or higher
+* **Node.js**: v22.0.0 or higher
+* **npm**: v10.0.0 or higher
 
-### 1. Installation
-Clone the repository and install all dependencies in a single step from the root directory:
-
+### 1. Clone & Install
 ```bash
 git clone https://github.com/DivamMalik/Breathe-Clean.git
 cd Breathe-Clean
 npm install
 ```
 
-### 2. Start the Application
-Run the local development server:
-
+### 2. Run the Development Server
 ```bash
 npm run dev
 ```
-
-The Express server will start at **`http://localhost:5001`**, serving both the backend API and the frontend application together on the same origin (no CORS configuration required for local access).
-
-Open **`http://localhost:5001`** in your browser.
-
-*(Alternatively, you can open `Frontend/index.html` directly in a browser or through Live Server on port 5500; the backend automatically handles cross-origin session credentials).*
+Open **`http://localhost:5001`** in your browser. The single Express server serves both the frontend interface and the backend REST API on the same origin.
 
 ### 3. Run the Automated Test Suite
 To run all **95 automated tests** (51 frontend tests + 44 backend tests):
-
 ```bash
 npm test
 ```
 
-Or run each suite individually:
-
-```bash
-npm run test:frontend   # Runs 51 frontend tests
-npm run test:backend    # Runs 44 backend tests
-```
-
 ---
 
-## 👥 Accounts & Testing
+## 📂 Project Structure
 
-| Account Mode | Access Details | Features Available |
-|:---|:---|:---|
-| **Demo User** | Auto-loaded (`Divam Malik`) | Full CFD simulation, interactive room controls, demo telemetry, instant Auto/Manual mode toggle. |
-| **Registered User** | Create via `Sign Up` modal | Persistent account in SQLite, personal room setups, saved locations, and verified Google Maps AQI analytics. |
+```text
+Breathe-Clean/
+├── Frontend/                 # Lightweight Vanilla JS Single-Page Application
+│   ├── assets/images/        # High-resolution room photography & icons
+│   ├── css/styles.css        # Responsive glassmorphic styling system
+│   ├── js/                   # SPA controller, particle canvas, state, and view engine
+│   │   ├── api.js            # Dynamic API client & telemetry bridge
+│   │   ├── app.js            # Main application event router
+│   │   ├── chatbot.js        # Explainable environmental decision assistant
+│   │   ├── engine.js         # Client-side ventilation rule verifier
+│   │   ├── state.js          # Reactive state store
+│   │   ├── utils.js          # SVG chart utilities and helpers
+│   │   └── views.js          # Onboarding, dashboard, and analytics views
+│   ├── test/                 # 51 Frontend unit and integration tests
+│   └── index.html            # Application entry point
+├── backend/                  # Node.js 22 Express backend
+│   ├── data/                 # SQLite WAL-mode database files
+│   ├── src/
+│   │   ├── auth/             # Session store & scrypt password security
+│   │   ├── controllers/      # Sensor, device, decision, and account handlers
+│   │   ├── routes/           # REST endpoints
+│   │   ├── services/         # ASHRAE rule engine & live environmental providers
+│   │   └── server.js         # Express server with reverse-proxy trust
+│   ├── test/                 # 44 Backend unit & rule validation tests
+│   └── package.json          # Backend dependencies
+├── deploy/
+│   ├── aws-provision-ec2.sh  # Automated AWS EC2 + security group launch script
+│   └── setup-ec2.sh          # Ubuntu 24.04 Nginx + PM2 bootstrap script
+├── docs/screenshots/         # Verified interface screenshots
+├── .github/workflows/ci.yml  # Automated GitHub Actions test pipeline (Node 22)
+├── Dockerfile                # Production Node 22 container specification
+├── ecosystem.config.js       # PM2 production process configuration
+├── package.json              # Unified root scripts
+└── README.md                 # Project documentation
+```
 
 ---
 
 ## 🛠️ Technology Stack
 
-| Layer | Technologies |
-|:---|:---|
-| **Frontend Architecture** | Pure Vanilla JavaScript (ES6+), HTML5 Canvas 2D Engine, Vanilla CSS3 (Custom Design Tokens, Glassmorphism) |
-| **Backend Framework** | Node.js (v18+), Express 5.x |
-| **Database & Persistence** | SQLite with WAL mode (`better-sqlite3`), Server-managed Session Store |
-| **Security & Auth** | Scrypt password hashing, HttpOnly SameSite session cookies, CORS origin validation |
-| **Environmental Telemetry** | Google Maps Platform Air Quality API (Universal AQI), Google Maps Geocoding API |
-| **Ventilation Standard** | ASHRAE Standard 62.1 (Ventilation for Acceptable Indoor Air Quality) |
-| **Testing Framework** | Native Node Test Runner (`node --test`), 95 automated test cases |
-| **CI/CD** | GitHub Actions (`.github/workflows/ci.yml`) testing on Node 18 & 20 |
+* **Frontend:** Vanilla JavaScript (ES6+), HTML5 Canvas 2D particle simulation, CSS3 Custom Tokens.
+* **Backend:** Node.js 22 LTS, Express 5.
+* **Database:** SQLite with WAL mode (`better-sqlite3`), Amazon DynamoDB for cloud telemetry.
+* **Cloud & Infrastructure:** Amazon EC2 (`t3.micro`), AWS IAM instance profiles, Nginx 1.24, PM2.
+* **Testing:** Native Node test runner (`node --test`), 95 test cases (100% passing).
+* **CI/CD:** GitHub Actions with Node 22 matrix.
 
 ---
 
 ## 📄 License
 
-This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details. Built with ❤️ by **Divam Malik**.
+Distributed under the [MIT License](LICENSE).
