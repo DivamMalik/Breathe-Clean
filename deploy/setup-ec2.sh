@@ -6,8 +6,8 @@ sudo apt-get update -y
 sudo apt-get upgrade -y
 sudo apt-get install -y curl git build-essential nginx
 
-echo "=== 2. Installing Node.js 20 LTS ==="
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+echo "=== 2. Installing Node.js 22 LTS ==="
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 sudo apt-get install -y nodejs
 sudo npm install -g pm2
 

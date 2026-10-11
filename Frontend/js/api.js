@@ -8,7 +8,11 @@ const STORAGE_KEYS = {
   LEGACY_OWNER: 'breatheclean_legacy_setup_owner'
 };
 
-const API_BASE_URL = (window.BREATHE_CLEAN_API_BASE || 'http://localhost:5001/api')
+const defaultApiBase = (typeof window !== 'undefined' && window.location && window.location.origin && window.location.origin !== 'null' && !window.location.protocol.startsWith('file'))
+  ? `${window.location.origin}/api`
+  : 'http://localhost:5001/api';
+
+const API_BASE_URL = (window.BREATHE_CLEAN_API_BASE || defaultApiBase)
   .replace(/\/+$/, '');
 
 const DEFAULT_ROOMS = [

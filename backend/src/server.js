@@ -17,6 +17,10 @@ restorePersistedState();
 
 const app = express();
 
+if (process.env.NODE_ENV === "production") {
+  app.set("trust proxy", 1);
+}
+
 const configuredCorsOrigin = process.env.CORS_ORIGIN;
 app.use(cors({
   origin: configuredCorsOrigin || true,
