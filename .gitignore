@@ -10,3 +10,13 @@ Thumbs.db
 # Logs & temp
 *.log
 scratch/
+
+# Secrets & Keys
+*.pem
+*.key
+.env
+backend/.env
+
+# Dependencies & Build
+node_modules/
+backend/node_modules/

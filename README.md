@@ -7,9 +7,12 @@
 [![SQLite](https://img.shields.io/badge/SQLite-WAL_Mode-003B57?style=for-the-badge&logo=sqlite&logoColor=white)](https://www.sqlite.org)
 [![Google Maps Air Quality](https://img.shields.io/badge/Google_Maps-Air_Quality_API-4285F4?style=for-the-badge&logo=google-maps&logoColor=white)](https://developers.google.com/maps/documentation/air-quality)
 [![Tests Passing](https://img.shields.io/badge/Tests-95%20Passing-success?style=for-the-badge)](https://nodejs.org/api/test.html)
+[![AWS EC2](https://img.shields.io/badge/AWS-Amazon_EC2-FF9900?style=for-the-badge&logo=amazon-aws&logoColor=white)](http://ec2-35-154-243-219.ap-south-1.compute.amazonaws.com)
+[![AWS DynamoDB](https://img.shields.io/badge/AWS-Amazon_DynamoDB-4053D6?style=for-the-badge&logo=amazon-dynamodb&logoColor=white)](http://ec2-35-154-243-219.ap-south-1.compute.amazonaws.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
 
----
+> 🚀 **Live AWS Deployment:** [http://ec2-35-154-243-219.ap-south-1.compute.amazonaws.com](http://ec2-35-154-243-219.ap-south-1.compute.amazonaws.com)  
+> 🌐 **Direct Server IP:** [http://35.154.243.219](http://35.154.243.219)
 
 ## 🏆 Project Overview
 

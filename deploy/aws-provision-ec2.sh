@@ -35,6 +35,7 @@ if [ "$SG_ID" == "None" ] || [ -z "$SG_ID" ]; then
     --description "Security group for Breathe Clean web server" \
     --vpc-id "$VPC_ID" \
     --region "$REGION" \
+    --query "GroupId" \
     --output text)
   echo "Created Security Group: $SG_ID"
 

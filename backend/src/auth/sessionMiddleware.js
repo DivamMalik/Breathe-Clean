@@ -23,7 +23,7 @@ function createSessionMiddleware() {
     cookie: {
       httpOnly: true,
       sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
+      secure: "auto",
       maxAge: SESSION_MAX_AGE_MS,
       path: "/"
     }
