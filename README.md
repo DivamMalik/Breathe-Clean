@@ -57,10 +57,7 @@ In major cities and across North India, winter air quality regularly spikes past
 | ![Multi-Zone Console](docs/screenshots/screenshot_admin_controls_scrolled_table.png) | ![Device Pairing Wizard](docs/screenshots/screenshot_step4_device_pairing.png) |
 | *Campus-wide zone telemetry and one-click manual overrides for windows, dampers, and air purifiers.* | *Interactive pairing wizard for HEPA purifiers, motorized window servos, and central HVAC dampers.* |
 
-| High-Contrast OLED Dark Mode | Historical Telemetry & Event Audit Trail |
-| :---: | :---: |
-| ![Dark Mode Interface](docs/screenshots/screenshot_dark_mode.png) | ![Telemetry Trends and Activity Log](docs/screenshots/screenshot_bottom.png) |
-| *Full theme toggle with custom glassmorphism tokens for low-light facility monitoring.* | *1H / 6H / 24H / 7D sensor trend charts with automated decision audit timestamps.* |
+
 
 ---
 
