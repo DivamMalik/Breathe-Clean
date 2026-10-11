@@ -39,7 +39,7 @@ In major cities and across North India, winter air quality regularly spikes past
 ## 📸 Interface Showcase
 
 ### 🎛️ Real-Time Telemetry Dashboard & 2D Airflow Simulation
-*Live indoor/outdoor atmospheric telemetry cards, 2D particle fluid dynamics canvas (Classroom 301), and system status donut gauge.*
+*Live indoor/outdoor atmospheric telemetry cards, 2D particle fluid dynamics canvas (room-1), and system status donut gauge.*
 
 ![Main Live Dashboard](docs/screenshots/screenshot_kpi_fixed.png)
 
@@ -47,15 +47,15 @@ In major cities and across North India, winter air quality regularly spikes past
 
 ### 🛡️ Autonomous Response & Facility Controls
 
-| Autonomous Pollution Shield Response | Environmental Simulation Inspector |
+| Autonomous Stimulation Data Managent | Device Working Inspector |
 | :---: | :---: |
 | ![Pollution Shield Response](docs/screenshots/screenshot_pollution_spike.png) | ![CFD Inspector Modal](docs/screenshots/screenshot_modal.png) |
-| *Outdoor AQI spikes to 220 &rarr; Windows seal immediately, HVAC filters indoor air, and purifiers ramp to Turbo.* | *High-fidelity CFD air velocity (753 m³/h), 3.7 ACH air change rate, and ASHRAE 62.1 compliance diagnostics.* |
+| *Scroll bar for mannual conroll of the systems in the different panel.* | *Device managing panel to see everything in one place* |
 
-| Multi-Zone Facility Actuation Console | Smart Hardware Pairing Wizard (Step 4) |
+| Functions to Analayze | Smart Ai-Assistant |
 | :---: | :---: |
-| ![Multi-Zone Console](docs/screenshots/screenshot_admin_controls_scrolled_table.png) | ![Device Pairing Wizard](docs/screenshots/screenshot_step4_device_pairing.png) |
-| *Campus-wide zone telemetry and one-click manual overrides for windows, dampers, and air purifiers.* | *Interactive pairing wizard for HEPA purifiers, motorized window servos, and central HVAC dampers.* |
+| ![Functions](docs/screenshots/screenshot_admin_controls_scrolled_table.png) | ![Ai-Assistant](docs/screenshots/screenshot_step4_device_pairing.png) |
+| *All function / formulas used to generate live data perfectly.* | *Interactive Smart AI-ASSISTANT to explaore the devices and explore the data and simulation by chatting.* |
 
 
 
