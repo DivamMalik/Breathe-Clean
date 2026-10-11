@@ -14,6 +14,7 @@ COPY . .
 WORKDIR /app/backend
 ENV NODE_ENV=production
 ENV PORT=5001
+ENV SESSION_SECRET=breathe-clean-production-secret-session-key-minimum-32-chars
 
 EXPOSE 5001
 
