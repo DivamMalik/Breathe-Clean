@@ -39,13 +39,29 @@ In major cities and across North India, winter air quality regularly spikes past
 
 ## 📸 Interface Showcase
 
-| Master Actuation Console | Smart Hardware Pairing Wizard |
-|:---:|:---:|
-| ![Admin Controls](docs/screenshots/screenshot_admin_controls_upgraded.png) | ![Device Pairing](docs/screenshots/screenshot_step4_device_pairing.png) |
+### 🎛️ Real-Time Telemetry Dashboard & 2D Airflow Simulation
+*Live indoor/outdoor atmospheric telemetry cards, 2D particle fluid dynamics canvas (Classroom 301), and system status donut gauge.*
 
-| Live Telemetry & Environmental Status | Real-Time Room Airflow Simulation |
-|:---:|:---:|
-| ![Zone Telemetry](docs/screenshots/screenshot_admin_controls_table.png) | ![CFD Simulation](docs/screenshots/screenshot_library_room.png) |
+![Main Live Dashboard](docs/screenshots/screenshot_kpi_fixed.png)
+
+---
+
+### 🛡️ Autonomous Response & Facility Controls
+
+| Autonomous Pollution Shield Response | Environmental Simulation Inspector |
+| :---: | :---: |
+| ![Pollution Shield Response](docs/screenshots/screenshot_pollution_spike.png) | ![CFD Inspector Modal](docs/screenshots/screenshot_modal.png) |
+| *Outdoor AQI spikes to 220 &rarr; Windows seal immediately, HVAC filters indoor air, and purifiers ramp to Turbo.* | *High-fidelity CFD air velocity (753 m³/h), 3.7 ACH air change rate, and ASHRAE 62.1 compliance diagnostics.* |
+
+| Multi-Zone Facility Actuation Console | Smart Hardware Pairing Wizard (Step 4) |
+| :---: | :---: |
+| ![Multi-Zone Console](docs/screenshots/screenshot_admin_controls_scrolled_table.png) | ![Device Pairing Wizard](docs/screenshots/screenshot_step4_device_pairing.png) |
+| *Campus-wide zone telemetry and one-click manual overrides for windows, dampers, and air purifiers.* | *Interactive pairing wizard for HEPA purifiers, motorized window servos, and central HVAC dampers.* |
+
+| High-Contrast OLED Dark Mode | Historical Telemetry & Event Audit Trail |
+| :---: | :---: |
+| ![Dark Mode Interface](docs/screenshots/screenshot_dark_mode.png) | ![Telemetry Trends and Activity Log](docs/screenshots/screenshot_bottom.png) |
+| *Full theme toggle with custom glassmorphism tokens for low-light facility monitoring.* | *1H / 6H / 24H / 7D sensor trend charts with automated decision audit timestamps.* |
 
 ---
 
