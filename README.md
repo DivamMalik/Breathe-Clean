@@ -10,7 +10,6 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
 
 > 🚀 **Live AWS Deployment:** [http://ec2-35-154-243-219.ap-south-1.compute.amazonaws.com](http://ec2-35-154-243-219.ap-south-1.compute.amazonaws.com)  
-> 🌐 **Direct Public IP:** [http://35.154.243.219](http://35.154.243.219)  
 > 🏆 **Built for:** WeMakeDevs × AWS Environmental Hacks — **Track 01: Air**
 
 ---
